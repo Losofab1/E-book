@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-slate-100 text-slate-800 antialiased;
+  }
+
+  button,
+  input,
+  select {
+    @apply transition-colors duration-200 ease-out;
+  }
+
+  table {
+    @apply border-collapse border-spacing-0;
+  }
+}
