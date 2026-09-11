@@ -1,0 +1,398 @@
+openapi: 3.0.3
+info:
+  title: Biblioth API
+  version: 1.0.0
+  description: API pour la gestion de la bibliothèque, de l'authentification et des accès numériques.
+servers:
+  - url: http://localhost:8080
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [nom, prenom, email, password]
+      properties:
+        nom:
+          type: string
+        prenom:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        role:
+          type: string
+          enum: [ADMIN, BIBLIOTHECAIRE, ADHERENT]
+          description: Ignoré par l'inscription publique; le rôle créé est toujours ADHERENT.
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        role:
+          type: string
+    Book:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        author:
+          type: string
+        isbn:
+          type: string
+        category:
+          type: string
+        pages:
+          type: integer
+        publicationDate:
+          type: string
+          format: date
+        totalCopies:
+          type: integer
+        availableCopies:
+          type: integer
+        active:
+          type: boolean
+        digitalEnabled:
+          type: boolean
+        previewPageCount:
+          type: integer
+        pdfStorageKey:
+          type: string
+    BookRequest:
+      type: object
+      required: [title, author, isbn]
+      properties:
+        title:
+          type: string
+        author:
+          type: string
+        isbn:
+          type: string
+        category:
+          type: string
+        pages:
+          type: integer
+        publicationDate:
+          type: string
+          format: date
+        totalCopies:
+          type: integer
+        digitalEnabled:
+          type: boolean
+        previewPageCount:
+          type: integer
+        pdfStorageKey:
+          type: string
+    BookAvailabilityRequest:
+      type: object
+      properties:
+        availableCopies:
+          type: integer
+    DigitalAccessResponse:
+      type: object
+      properties:
+        bookId:
+          type: integer
+        mode:
+          type: string
+          enum: [PREVIEW, FULL]
+        fullAccess:
+          type: boolean
+        previewPageCount:
+          type: integer
+        expiresAt:
+          type: string
+          format: date-time
+        sourceType:
+          type: string
+          enum: [LOAN, RESERVATION]
+        accessToken:
+          type: string
+        message:
+          type: string
+    LoanRequest:
+      type: object
+      required: [userId, bookId]
+      properties:
+        userId:
+          type: integer
+        bookId:
+          type: integer
+        dueAt:
+          type: string
+          format: date-time
+    LoanExtensionRequest:
+      type: object
+      required: [dueAt]
+      properties:
+        dueAt:
+          type: string
+          format: date-time
+    LoanResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        bookId:
+          type: integer
+        status:
+          type: string
+          enum: [BORROWED, RETURNED]
+        borrowedAt:
+          type: string
+          format: date-time
+        dueAt:
+          type: string
+          format: date-time
+    ReservationRequest:
+      type: object
+      required: [userId, bookId]
+      properties:
+        userId:
+          type: integer
+        bookId:
+          type: integer
+    ReservationResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        bookId:
+          type: integer
+        status:
+          type: string
+          enum: [WAITING, READY_FOR_PICKUP, PICKED_UP, EXPIRED, CANCELED]
+        reservedAt:
+          type: string
+          format: date-time
+        readyAt:
+          type: string
+          format: date-time
+        pickupDeadline:
+          type: string
+          format: date-time
+paths:
+  /api/auth/register:
+    post:
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '200':
+          description: Registered
+  /api/auth/login:
+    post:
+      summary: Login and receive JWT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authenticated
+  /api/books:
+    get:
+      summary: List or search books
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Books
+    post:
+      summary: Create a book
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookRequest'
+      responses:
+        '201':
+          description: Created
+  /api/books/{id}:
+    get:
+      summary: Get book by id
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Book
+    put:
+      summary: Update a book
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookRequest'
+      responses:
+        '200':
+          description: Updated
+    delete:
+      summary: Delete a book
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Deleted
+  /api/books/{id}/availability:
+    patch:
+      summary: Update book availability
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookAvailabilityRequest'
+      responses:
+        '200':
+          description: Updated
+  /api/digital/books/{bookId}/access:
+    get:
+      summary: Check digital access mode for a book
+      security:
+        - bearerAuth: []
+        - {}
+      parameters:
+        - in: path
+          name: bookId
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Digital access status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DigitalAccessResponse'
+  /api/digital/loans:
+    post:
+      summary: Validate a physical loan and activate full PDF access
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoanRequest'
+      responses:
+        '200':
+          description: Loan created
+  /api/digital/loans/{loanId}/extend:
+    patch:
+      summary: Extend a physical loan and its digital access window
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: loanId
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoanExtensionRequest'
+      responses:
+        '200':
+          description: Loan extended
+  /api/digital/reservations:
+    post:
+      summary: Create a physical reservation
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservationRequest'
+      responses:
+        '200':
+          description: Reservation created
+  /api/digital/reservations/{reservationId}/ready:
+    patch:
+      summary: Start the 48h pickup window and activate early PDF access
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: reservationId
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Reservation ready for pickup
+  /actuator/health:
+    get:
+      summary: Actuator health
+      responses:
+        '200':
+          description: Health status

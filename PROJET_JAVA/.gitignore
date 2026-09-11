@@ -1,0 +1,31 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build outputs
+**/target/
+**/build/
+**/bin/
+**/out/
+
+# Secrets / env
+.env
+.env.*
+*.pem
+*.key
+*.crt
+*.csr
+
+# Logs
+*.log
+
+# Local DB / data
+*.sqlite
+*.db
+
+# GitHub Actions local artifacts
+.github/workflows/*.local.yml

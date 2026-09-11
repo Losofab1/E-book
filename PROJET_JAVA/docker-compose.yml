@@ -1,0 +1,31 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16
+    container_name: biblioth-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: biblioth
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: change_me_strong_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: biblioth-app
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    depends_on:
+      - db
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:
