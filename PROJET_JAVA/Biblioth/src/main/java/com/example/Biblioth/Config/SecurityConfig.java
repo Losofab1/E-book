@@ -34,7 +34,7 @@ public class SecurityConfig {
 
     public SecurityConfig(
             JwFilter jwtFilter,
-            @Value("${cors.allowed-origins:http://localhost:5173}") String allowedOrigins
+            @Value("${cors.allowed-origins:https://e-book-steel-nu.vercel.app,http://localhost:5173}") String allowedOrigins
     ) {
         this.jwtFilter = jwtFilter;
         this.allowedOrigins = allowedOrigins;
