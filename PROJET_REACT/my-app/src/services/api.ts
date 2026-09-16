@@ -1,10 +1,11 @@
 import axios from 'axios'
 
-const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080'
-const API_BASE_URL = `${configuredBaseUrl.replace(/\/+$/, '')}${configuredBaseUrl.replace(/\/+$/, '').endsWith('/api') ? '' : '/api'}`
+const rawBase = import.meta.env.VITE_API_BASE_URL || 'https://e-book-lmtx.onrender.com'
+const cleanBase = rawBase.trim().replace(/^\/+/, '').replace(/\/+$/, '')
+const finalBase = cleanBase.endsWith('/api') ? cleanBase : `${cleanBase}/api`
 
 export const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: finalBase,
   headers: {
     'Content-Type': 'application/json',
   },
