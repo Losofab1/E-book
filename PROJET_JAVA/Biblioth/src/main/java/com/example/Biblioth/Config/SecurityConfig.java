@@ -52,6 +52,8 @@ public class SecurityConfig {
                         .accessDeniedHandler((request, response, accessDeniedException) ->
                                 response.sendError(HttpServletResponse.SC_FORBIDDEN, "Accès refusé.")))
                 .authorizeHttpRequests(auth -> auth
+                        // Allow all CORS preflight requests (OPTIONS) without authentication
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**", "/error", "/actuator/health/**", "/actuator/info").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/digital/books/*/access").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/books/**").hasAnyRole("ADMIN", "BIBLIOTHECAIRE", "ADHERENT")
@@ -100,7 +102,8 @@ public class SecurityConfig {
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/api/**", configuration);
+        // Register CORS for all paths so preflight requests are handled by Spring Security CORS filter
+        source.registerCorsConfiguration("/**", configuration);
         return source;
     }
 }
