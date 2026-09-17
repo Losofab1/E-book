@@ -9,7 +9,7 @@ const Register = () => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [role, setRole] = useState<'etudiant' | 'professeur' | 'externe'>('etudiant')
+  const [role, setRole] = useState<'etudiant' | 'professeur' | 'adherent'>('etudiant')
   const [error, setError] = useState('')
   const auth = useAuth()
   const navigate = useNavigate()
@@ -20,11 +20,24 @@ const Register = () => {
       setError('Veuillez remplir tous les champs.')
       return
     }
+    if (password.length < 6) {
+      setError('Le mot de passe doit contenir au moins 6 caractères.')
+      return
+    }
     const success = await auth.register(name, email, password, role)
     if (success) {
       navigate('/profile')
     } else {
       setError('Cet email est déjà utilisé. Utilisez un autre compte.')
+    }
+  }
+
+  const handlePasswordChange = (value: string) => {
+    setPassword(value)
+    if (value.length > 0 && value.length < 6) {
+      setError('Le mot de passe doit contenir au moins 6 caractères.')
+    } else if (error === 'Le mot de passe doit contenir au moins 6 caractères.') {
+      setError('')
     }
   }
 
@@ -61,10 +74,14 @@ const Register = () => {
             <label className="mb-2 block text-sm font-semibold">Mot de passe</label>
             <div className="relative">
               <input
+                minLength={6}
+                required
+                aria-invalid={password.length > 0 && password.length < 6}
+                aria-describedby="password-requirement"
                 className="w-full rounded-2xl border border-white/20 bg-white/10 px-4 py-3 pr-12 text-white outline-none placeholder:text-white/60 focus:border-white/50"
                 type={showPassword ? 'text' : 'password'}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => handlePasswordChange(e.target.value)}
                 placeholder="********"
               />
               <button
@@ -76,20 +93,25 @@ const Register = () => {
                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
             </div>
+            <p id="password-requirement" className="mt-2 text-xs text-white/70">Au moins 6 caractères.</p>
           </div>
           <div>
             <label className="mb-2 block text-sm font-semibold">Type de membre</label>
             <select
               className="w-full rounded-2xl border border-white/20 bg-white px-4 py-3 text-slate-900 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200"
               value={role}
-              onChange={(e) => setRole(e.target.value as 'etudiant' | 'professeur' | 'externe')}
+              onChange={(e) => setRole(e.target.value as 'etudiant' | 'professeur' | 'adherent')}
             >
               <option value="etudiant">Étudiant</option>
               <option value="professeur">Professeur</option>
-              <option value="externe">Externe</option>
+              <option value="adherent">Adhérent simple</option>
             </select>
           </div>
-          {error && <p className="text-sm text-orange-200">{error}</p>}
+          {error && (
+            <p role="alert" aria-live="assertive" className="rounded-xl border border-red-400/50 bg-red-950/50 p-3 text-sm font-semibold text-red-100">
+              {error}
+            </p>
+          )}
           <button className="w-full rounded-full bg-yellow-400 px-6 py-3 font-semibold text-green-900 transition hover:bg-yellow-300">Créer un compte</button>
         </form>
 

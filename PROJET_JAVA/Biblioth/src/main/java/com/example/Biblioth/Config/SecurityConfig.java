@@ -56,9 +56,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**", "/error", "/actuator/health/**", "/actuator/info").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/digital/books/*/access").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/books/**").hasAnyRole("ADMIN", "BIBLIOTHECAIRE", "ADHERENT")
+                        .requestMatchers(HttpMethod.GET, "/api/books/**").hasAnyRole("ADMIN", "BIBLIOTHECAIRE", "ADHERENT", "ETUDIANT", "PROFESSEUR")
                         .requestMatchers("/api/books/**").hasAnyRole("ADMIN", "BIBLIOTHECAIRE")
-                        .requestMatchers("/api/digital/loans/**", "/api/digital/reservations/**").hasAnyRole("ADMIN", "BIBLIOTHECAIRE")
+                        .requestMatchers("/api/digital/loans/**", "/api/digital/reservations/**").authenticated()
                         .requestMatchers("/api/loans/**", "/api/reservations/**").hasAnyRole("ADMIN", "BIBLIOTHECAIRE")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/bibliothecaire/**").hasAnyRole("ADMIN", "BIBLIOTHECAIRE")
@@ -93,12 +93,12 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        // Allow any origin patterns (public access from any browser)
-        config.setAllowedOriginPatterns(List.of("*"));
-        // Methods for dynamic endpoints
+        config.setAllowedOrigins(Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isBlank())
+                .toList());
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
-        // For public endpoints, disable credentials so Access-Control-Allow-Origin can be '*'
         config.setAllowCredentials(false);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

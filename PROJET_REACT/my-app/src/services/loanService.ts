@@ -3,18 +3,22 @@ import type { Loan } from './types'
 
 export const loanService = {
   getAll() {
-    return api.get<Loan[]>('/loans')
+    return api.get<Loan[]>('/digital/loans')
   },
 
-  getByUser(email: string) {
-    return api.get<Loan[]>(`/loans/user/${email}`)
+  getByUser() {
+    return api.get<Loan[]>('/digital/loans')
   },
 
   create(payload: Partial<Loan>) {
-    return api.post<Loan>('/loans', payload)
+    return api.post<Loan>('/digital/loans', payload)
   },
 
   returnLoan(id: string) {
-    return api.patch<Loan>(`/loans/${id}/return`)
+    return api.patch<Loan>(`/digital/loans/${id}/return`)
+  },
+
+  extendLoan(id: string, dueAt: string) {
+    return api.patch<Loan>(`/digital/loans/${id}/extend`, { dueAt })
   },
 }

@@ -40,7 +40,7 @@ const ResetPassword = () => {
     setIsSubmitting(true)
 
     try {
-      const response = await authService.resetPassword({ token, password, confirmPassword })
+      const response = await authService.resetPassword({ token, newPassword: password })
       const payload = response?.data
 
       if (payload?.success === false) {

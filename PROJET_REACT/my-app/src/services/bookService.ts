@@ -21,4 +21,10 @@ export const bookService = {
   remove(id: string) {
     return api.delete(`/books/${id}`)
   },
+
+  importCsv(file: File) {
+    const data = new FormData()
+    data.append('file', file)
+    return api.post<{ importedCount: number }>('/books/import', data, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
 }

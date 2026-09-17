@@ -42,6 +42,15 @@ public class UserEntity implements UserDetails {
     @Column(nullable = false)
     private boolean actif = true;
 
+    @Column(length = 30)
+    private String phone;
+
+    @Column(length = 200)
+    private String address;
+
+    @Column(length = 100)
+    private String city;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -97,6 +106,30 @@ public class UserEntity implements UserDetails {
 
     public void setActif(boolean actif) {
         this.actif = actif;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
+    public String getAddress() {
+        return address;
+    }
+
+    public void setAddress(String address) {
+        this.address = address;
+    }
+
+    public String getCity() {
+        return city;
+    }
+
+    public void setCity(String city) {
+        this.city = city;
     }
 
     public LocalDateTime getCreatedAt() {

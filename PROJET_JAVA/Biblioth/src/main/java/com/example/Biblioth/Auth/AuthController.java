@@ -43,4 +43,10 @@ public class AuthController {
         passwordResetService.resetPassword(request.getToken(), request.getNewPassword());
         return ResponseEntity.ok().build();
     }
+
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout() {
+        // JWT authentication is stateless; the client removes its token.
+        return ResponseEntity.noContent().build();
+    }
 }

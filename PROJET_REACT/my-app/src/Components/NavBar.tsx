@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom'
 import { BellRing, BookOpenText, HandCoins, ListOrdered, X, CheckCircle, XCircle, RotateCcw, Menu } from 'lucide-react'
 import { useAuth } from '../AuthContext'
-import { useState, useEffect, useRef } from 'react'
-import { getNotificationsForUser, getUnreadCount, type AppNotification } from '../notificationUtils'
+import { useState, useEffect, useRef, type MouseEvent as ReactMouseEvent } from 'react'
+import { getNotificationsForUser, markNotificationRead, type AppNotification } from '../notificationUtils'
 import ShowMoreButton from './ui/ShowMoreButton'
 
 const NavBar = () => {
@@ -11,6 +11,7 @@ const NavBar = () => {
   const isStaff = user?.role === 'admin' || user?.role === 'bibliothecaire'
   const [showNotifications, setShowNotifications] = useState(false)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
+  const [authNotice, setAuthNotice] = useState('')
   const notifRef = useRef<HTMLDivElement>(null)
 
   const [notifications, setNotifications] = useState<AppNotification[]>([])
@@ -20,32 +21,39 @@ const NavBar = () => {
   const [showAllLoanNotifications, setShowAllLoanNotifications] = useState(false)
   const [showAllReservationNotifications, setShowAllReservationNotifications] = useState(false)
 
-  const refreshNotifications = () => {
-    const email = user?.email
-    const role = user?.role
-
-    const allNotifs = getNotificationsForUser(email, role)
+  const refreshNotifications = async () => {
+    if (!user) { setNotifications([]); setUnreadCount(0); return }
+    try {
+    const allNotifs = await getNotificationsForUser()
     setNotifications(allNotifs)
 
-    const unread = getUnreadCount(email, role)
+    const unread = allNotifs.filter((notification) => !notification.read).length
     setUnreadCount(unread)
 
-    const lastReadStr = localStorage.getItem('losofab_notifications_last_read')
-    const lastRead = lastReadStr ? parseInt(lastReadStr, 10) : 0
-
-const unreadNotifs = allNotifs.filter((n) => n.createdAt > lastRead)
+const unreadNotifs = allNotifs.filter((notification) => !notification.read)
     setHasUnreadLoans(unreadNotifs.some((n) => n.type.startsWith('loan') || n.type.startsWith('extension')))
     setHasUnreadReservations(unreadNotifs.some((n) => n.type.startsWith('reservation')))
+    } catch { setNotifications([]); setUnreadCount(0) }
   }
 
   useEffect(() => {
-    refreshNotifications()
-    const interval = setInterval(refreshNotifications, 2000)
+    void refreshNotifications()
+    const interval = setInterval(() => void refreshNotifications(), 15_000)
     return () => clearInterval(interval)
   }, [user])
 
+  useEffect(() => {
+    const notice = sessionStorage.getItem('losofab_auth_notice')
+    if (!notice) return
+
+    sessionStorage.removeItem('losofab_auth_notice')
+    setAuthNotice(notice)
+    const timeout = window.setTimeout(() => setAuthNotice(''), 5000)
+    return () => window.clearTimeout(timeout)
+  }, [user])
+
   const markAsRead = () => {
-    localStorage.setItem('losofab_notifications_last_read', String(Date.now()))
+    notifications.filter((notification) => !notification.read).forEach((notification) => void markNotificationRead(notification.id))
     setHasUnreadLoans(false)
     setHasUnreadReservations(false)
   }
@@ -113,8 +121,29 @@ const getMessageForType = (type: string) => {
 
   const closeMobileMenu = () => setShowMobileMenu(false)
 
+  const confirmLogout = () => {
+    if (!window.confirm('Voulez-vous vraiment vous déconnecter ?')) return
+
+    auth.logout()
+    closeMobileMenu()
+  }
+
+  const handleMobileNavClick = (event: ReactMouseEvent<HTMLElement>) => {
+    const button = (event.target as HTMLElement).closest('button')
+    if (!button?.textContent?.trim().toLowerCase().includes('connexion')) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    confirmLogout()
+  }
+
   return (
     <header className="fixed inset-x-0 top-0 z-50 bg-green-700/95 px-3 py-3 shadow-lg backdrop-blur-sm sm:px-4 sm:py-4">
+      {authNotice && (
+        <div role="status" className="fixed right-4 top-24 z-[60] rounded-xl border border-green-200 bg-white px-4 py-3 text-sm font-semibold text-green-800 shadow-xl">
+          {authNotice}
+        </div>
+      )}
       <div className="mx-auto flex max-w-7xl items-center gap-3">
         <Link to="/" onClick={closeMobileMenu} className="flex min-w-0 items-center gap-2 text-xl font-black text-white sm:gap-3 sm:text-2xl">
           <BookOpenText size={34} strokeWidth={1} className="shrink-0 sm:h-[42px] sm:w-[42px]" />
@@ -154,7 +183,7 @@ const getMessageForType = (type: string) => {
               <span className="rounded-full bg-white/10 px-3 py-2 text-sm text-white">{user.name}</span>
               <Link to="/profile" className="rounded-lg bg-white/10 px-3 py-2 text-sm text-white transition hover:bg-white/20">Espace privé</Link>
               <button
-                onClick={auth.logout}
+                onClick={confirmLogout}
                 className="rounded-lg bg-yellow-400 px-3 py-2 text-sm font-semibold text-green-900 transition hover:bg-yellow-300"
               >
                 Déconnexion
@@ -319,7 +348,7 @@ const getMessageForType = (type: string) => {
 
       {showMobileMenu && (
         <div className="mx-auto mt-3 max-w-7xl border-t border-white/20 pt-3 lg:hidden">
-          <nav className="grid gap-1 text-sm font-semibold text-white">
+          <nav onClickCapture={handleMobileNavClick} className="grid gap-1 text-sm font-semibold text-white">
             <Link to="/" onClick={closeMobileMenu} className="rounded-lg px-3 py-3 hover:bg-white/15">Accueil</Link>
             <Link to="/consulter" onClick={closeMobileMenu} className="rounded-lg px-3 py-3 hover:bg-white/15">Catalogue</Link>
             <Link to="/loans" onClick={closeMobileMenu} className="flex items-center justify-between rounded-lg px-3 py-3 hover:bg-white/15">Prêts {hasUnreadLoans && <span className="rounded-full bg-yellow-400 px-2 py-0.5 text-xs text-green-900">Nouveau</span>}</Link>

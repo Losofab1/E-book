@@ -14,4 +14,6 @@ public interface PhysicalLoanRepository extends JpaRepository<PhysicalLoan, Long
     );
 
     List<PhysicalLoan> findByUserId(Long userId);
+
+    List<PhysicalLoan> findAllByOrderByBorrowedAtDesc();
 }

@@ -34,17 +34,26 @@ public class AuthService {
             throw new IllegalArgumentException("Un utilisateur existe deja avec cet email.");
         }
 
+        Role publicRole = resolvePublicRole(request.getRole());
+
         UserEntity user = new UserEntity();
         user.setNom(request.getNom().trim());
         user.setPrenom(request.getPrenom().trim());
         user.setEmail(email);
         user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setRole(Role.ADHERENT);
+        user.setRole(publicRole);
         user.setActif(true);
 
         userRepository.save(user);
 
-        return new AuthResponse(jwtUtil.generateToken(user), user.getRole().name());
+        return responseFor(user);
+    }
+
+    private Role resolvePublicRole(Role requestedRole) {
+        if (requestedRole == Role.ETUDIANT || requestedRole == Role.PROFESSEUR || requestedRole == Role.ADHERENT) {
+            return requestedRole;
+        }
+        return Role.ADHERENT;
     }
 
     public AuthResponse login(LoginRequest request) {
@@ -55,7 +64,7 @@ public class AuthService {
 
         UserEntity user = userRepository.findByEmail(email).orElseThrow();
 
-        return new AuthResponse(jwtUtil.generateToken(user), user.getRole().name());
+        return responseFor(user);
     }
 
     private String normalizeEmail(String email) {
@@ -63,5 +72,15 @@ public class AuthService {
             throw new IllegalArgumentException("L'email est obligatoire.");
         }
         return email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private AuthResponse responseFor(UserEntity user) {
+        return new AuthResponse(
+                jwtUtil.generateToken(user),
+                user.getRole().name(),
+                user.getId(),
+                (user.getNom() + " " + user.getPrenom()).trim(),
+                user.getEmail()
+        );
     }
 }

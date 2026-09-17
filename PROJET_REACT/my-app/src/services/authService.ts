@@ -1,5 +1,5 @@
 import { api } from './api'
-import type { LoginRequest, LoginResponse, PasswordRecoveryRequest, PasswordResetRequest, Role } from './types'
+import type { LoginRequest, LoginResponse, PasswordRecoveryRequest, PasswordResetRequest, RegisterRequest, Role } from './types'
 
 export type AuthRole = Role
 
@@ -18,6 +18,10 @@ export const authService = {
     return api.post<AuthLoginResponse>('/auth/login', payload)
   },
 
+  async register(payload: RegisterRequest) {
+    return api.post<AuthLoginResponse>('/auth/register', payload)
+  },
+
   async getProfile() {
     return api.get<AuthenticatedUser>('/auth/profile')
   },
@@ -27,10 +31,10 @@ export const authService = {
   },
 
   async requestPasswordReset(payload: PasswordRecoveryRequest) {
-    return api.post('/auth/password/forgot', payload)
+    return api.post('/auth/forgot-password', payload)
   },
 
   async resetPassword(payload: PasswordResetRequest) {
-    return api.post('/auth/password/reset', payload)
+    return api.post('/auth/reset-password', payload)
   },
 }

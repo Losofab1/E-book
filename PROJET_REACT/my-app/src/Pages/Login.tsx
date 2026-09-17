@@ -9,6 +9,7 @@ const Login = () => {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const auth = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -18,11 +19,12 @@ const Login = () => {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError('')
+    setIsSubmitting(true)
 
-    const cleanEmail = email.trim().toLowerCase()
-    const success = await auth.login(email, password)
-    if (success) {
-      const authenticatedUser = auth.getUserByEmail(cleanEmail)
+    const result = await auth.login(email, password)
+    if (result.success) {
+      sessionStorage.setItem('losofab_auth_notice', 'Connexion réussie. Bienvenue dans votre espace.')
+      const authenticatedUser = result.user
 
       if (from) {
         navigate(from, { replace: true })
@@ -33,6 +35,10 @@ const Login = () => {
       }
     } else {
       setError('Identifiants invalides ou compte temporairement bloqué. Réessayez plus tard.')
+    }
+    if (!result.success) {
+      setError(result.message ?? 'Impossible de vous connecter. Réessayez plus tard.')
+      setIsSubmitting(false)
     }
   }
 
@@ -74,12 +80,17 @@ const Login = () => {
               </button>
             </div>
           </div>
-          {error && <p className="text-sm font-semibold text-red-300 bg-red-950/40 p-3 rounded-xl border border-red-500/30">{error}</p>}
+          {error && <p role="alert" className="rounded-xl border border-red-500/30 bg-red-950/40 p-3 text-sm font-semibold text-red-300">{error}</p>}
           <div className="flex items-center justify-between gap-4 text-sm">
             <Link to="/forgot-password" className="font-semibold text-yellow-300 hover:text-yellow-100">Mot de passe oublié ?</Link>
             <span className="text-white/60">Sécurité renforcée</span>
           </div>
-          <button className="w-full rounded-full bg-yellow-400 px-6 py-3 font-semibold text-green-900 transition hover:bg-yellow-300">Se connecter</button>
+          <button
+            disabled={isSubmitting}
+            className="w-full rounded-full bg-yellow-400 px-6 py-3 font-semibold text-green-900 transition hover:bg-yellow-300 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {isSubmitting ? 'Connexion en cours…' : 'Se connecter'}
+          </button>
         </form>
 
         <p className="mt-6 text-center text-sm text-white/70">

@@ -1,16 +1,16 @@
 import { api } from './api'
-import type { ApiResponse, CoordinateUpdatePayload, Profile } from './types'
+import type { CoordinateUpdatePayload, Profile } from './types'
 
 export const profileService = {
   getMe() {
-    return api.get<ApiResponse<Profile>>('/auth/profile')
+    return api.get<Profile>('/auth/profile')
   },
 
   updateMe(payload: Partial<Profile>) {
-    return api.put<ApiResponse<Profile>>('/auth/profile', payload)
+    return api.put<Profile>('/auth/profile', payload)
   },
 
   updateCoordinates(payload: CoordinateUpdatePayload) {
-    return api.patch<ApiResponse<Profile>>('/users/profile/coordinates', payload)
+    return api.patch<Profile>('/users/profile/coordinates', payload)
   },
 }

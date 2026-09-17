@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const rawBase = import.meta.env.VITE_API_BASE_URL || 'https://e-book-lmtx.onrender.com'
+const rawBase = import.meta.env.VITE_API_BASE_URL || window.location.origin
 const cleanBase = rawBase.trim().replace(/^\/+/, '').replace(/\/+$/, '')
 const finalBase = cleanBase.endsWith('/api') ? cleanBase : `${cleanBase}/api`
 
@@ -19,8 +19,7 @@ api.interceptors.request.use(
     const token = localStorage.getItem('jwt_token')
 
     if (token) {
-      config.headers = config.headers ?? {}
-      config.headers.Authorization = `Bearer ${token}`
+      config.headers.set('Authorization', `Bearer ${token}`)
     }
 
     return config

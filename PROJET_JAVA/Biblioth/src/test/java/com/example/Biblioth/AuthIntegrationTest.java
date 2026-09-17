@@ -122,6 +122,24 @@ class AuthIntegrationTest {
     }
 
     @Test
+    void shouldKeepPublicMemberRoleForPublicRegister() throws Exception {
+        RegisterRequest registerRequest = new RegisterRequest();
+        registerRequest.setNom("Martin");
+        registerRequest.setPrenom("Claire");
+        registerRequest.setEmail("claire@example.com");
+        registerRequest.setPassword("secret123");
+        registerRequest.setRole(Role.PROFESSEUR);
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(registerRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("PROFESSEUR"));
+
+        assertEquals(Role.PROFESSEUR, userRepository.findByEmail("claire@example.com").orElseThrow().getRole());
+    }
+
+    @Test
     void shouldRejectInvalidRegisterPayload() throws Exception {
         RegisterRequest registerRequest = new RegisterRequest();
         registerRequest.setNom("Dupont");

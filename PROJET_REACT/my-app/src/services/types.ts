@@ -1,4 +1,4 @@
-export type Role = 'ADMIN' | 'BIBLIOTHECAIRE' | 'ETUDIANT' | 'PROFESSEUR' | 'EXTERNE'
+export type Role = 'ADMIN' | 'BIBLIOTHECAIRE' | 'ETUDIANT' | 'PROFESSEUR' | 'ADHERENT'
 
 export interface ApiResponse<T> {
   success: boolean
@@ -23,13 +23,20 @@ export interface LoginRequest {
   password: string
 }
 
+export interface RegisterRequest {
+  nom: string
+  prenom: string
+  email: string
+  password: string
+  role?: Role
+}
+
 export interface LoginResponse {
   token: string
-  user: {
-    name: string
-    email: string
-    role: Role
-  }
+  role: Role
+  id: number
+  name: string
+  email: string
 }
 
 export interface CoordinateUpdatePayload {
@@ -47,40 +54,42 @@ export interface PasswordRecoveryRequest {
 
 export interface PasswordResetRequest {
   token: string
-  password: string
-  confirmPassword: string
+  newPassword: string
 }
 
 export interface Book {
-  id: string
+  id: number
   title: string
   author: string
+  isbn: string
   category: string
-  status: 'available' | 'loaned' | 'reserved'
+  availableCopies: number
 }
 
 export interface Loan {
-  id: string
-  bookId: string
-  userEmail: string
-  status: 'active' | 'returned' | 'overdue'
-  startDate: string
-  endDate: string
+  id: number
+  bookId: number
+  userId: number
+  status: 'BORROWED' | 'RETURNED'
+  borrowedAt: string
+  dueAt: string
 }
 
 export interface Reservation {
-  id: string
-  bookId: string
-  userEmail: string
-  status: 'pending' | 'confirmed' | 'cancelled'
-  requestedAt: string
+  id: number
+  bookId: number
+  userId: number
+  status: 'WAITING' | 'READY_FOR_PICKUP' | 'CANCELED' | 'EXPIRED' | 'PICKED_UP'
+  reservedAt: string
 }
 
 export interface DigitalAccess {
-  id: string
-  bookId: string
-  userEmail: string
-  role: string
-  expiresAt: string
-  granted: boolean
+  bookId: number
+  mode: 'FULL' | 'PREVIEW'
+  fullAccess: boolean
+  previewPageCount: number
+  expiresAt?: string
+  sourceType?: string
+  accessToken?: string
+  message: string
 }

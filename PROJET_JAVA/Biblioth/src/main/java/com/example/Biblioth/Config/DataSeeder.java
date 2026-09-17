@@ -31,16 +31,22 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     private void seedUsers() {
-        if (!userRepository.existsByEmail("admin@losofab")) {
-            UserEntity admin = new UserEntity();
+        UserEntity admin = userRepository.findByEmail("admin@losofab").orElseGet(() -> {
+            UserEntity created = new UserEntity();
+            created.setEmail("admin@losofab");
+            created.setPassword(passwordEncoder.encode("Admin123!"));
+            created.setRole(Role.ADMIN);
+            created.setActif(true);
+            return created;
+        });
+        if (admin.getId() == null) {
             admin.setNom("Admin");
             admin.setPrenom("System");
-            admin.setEmail("admin@losofab");
-            admin.setPassword(passwordEncoder.encode("Admin123!"));
-            admin.setRole(Role.ADMIN);
-            admin.setActif(true);
-            userRepository.save(admin);
         }
+        admin.setPhone("0153791179");
+        admin.setAddress("fabricelodjou014@gmail.com");
+        admin.setCity("Cotonou");
+        userRepository.save(admin);
 
         if (!userRepository.existsByEmail("biblio@losofab")) {
             UserEntity biblio = new UserEntity();

@@ -13,12 +13,14 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -66,5 +68,37 @@ class BookRestControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].title").value("Le Petit Prince"));
+    }
+
+    @Test
+    void shouldImportCatalogCsv() throws Exception {
+        MockMultipartFile csvFile = new MockMultipartFile(
+                "file",
+                "catalog.csv",
+                MediaType.TEXT_PLAIN_VALUE,
+                "Titre;Auteur;ISBN;Categorie\nLe Petit Prince;Antoine de Saint-Exupéry;978-1234567890;Littérature\n".getBytes()
+        );
+
+        when(bookService.importCsv(csvFile)).thenReturn(1);
+
+        mockMvc.perform(multipart("/api/books/import").file(csvFile))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.importedCount").value(1));
+    }
+
+    @Test
+    void shouldImportCatalogPdf() throws Exception {
+        MockMultipartFile pdfFile = new MockMultipartFile(
+                "file",
+                "catalog.pdf",
+                "application/pdf",
+                "%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF".getBytes()
+        );
+
+        when(bookService.importCsv(pdfFile)).thenReturn(1);
+
+        mockMvc.perform(multipart("/api/books/import").file(pdfFile))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.importedCount").value(1));
     }
 }

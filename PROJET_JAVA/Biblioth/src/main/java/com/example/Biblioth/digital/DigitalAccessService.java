@@ -11,6 +11,7 @@ import com.example.Biblioth.digital.dto.LoanRequest;
 import com.example.Biblioth.digital.dto.LoanResponse;
 import com.example.Biblioth.digital.dto.ReservationRequest;
 import com.example.Biblioth.digital.dto.ReservationResponse;
+import com.example.Biblioth.notification.NotificationService;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
@@ -28,19 +29,22 @@ public class DigitalAccessService {
     private final PhysicalLoanRepository physicalLoanRepository;
     private final ReservationRepository reservationRepository;
     private final DigitalAccessTokenRepository digitalAccessTokenRepository;
+    private final NotificationService notificationService;
 
     public DigitalAccessService(
             UserRepository userRepository,
             BookRepository bookRepository,
             PhysicalLoanRepository physicalLoanRepository,
             ReservationRepository reservationRepository,
-            DigitalAccessTokenRepository digitalAccessTokenRepository
+            DigitalAccessTokenRepository digitalAccessTokenRepository,
+            NotificationService notificationService
     ) {
         this.userRepository = userRepository;
         this.bookRepository = bookRepository;
         this.physicalLoanRepository = physicalLoanRepository;
         this.reservationRepository = reservationRepository;
         this.digitalAccessTokenRepository = digitalAccessTokenRepository;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -73,11 +77,42 @@ public class DigitalAccessService {
     }
 
     @Transactional(readOnly = true)
+    public java.util.List<LoanResponse> getAllLoans() {
+        return physicalLoanRepository.findAllByOrderByBorrowedAtDesc().stream().map(this::mapLoan).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.List<LoanResponse> getLoansForEmail(String email) {
+        UserEntity user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("Utilisateur introuvable."));
+        return getUserLoans(user.getId());
+    }
+
+    @Transactional(readOnly = true)
+    public Long getUserIdForEmail(String email) {
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("Utilisateur introuvable."))
+                .getId();
+    }
+
+    @Transactional(readOnly = true)
     public java.util.List<ReservationResponse> getUserReservations(Long userId) {
         findUser(userId);
         return reservationRepository.findByUserId(userId).stream()
                 .map(this::mapReservation)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.List<ReservationResponse> getAllReservations() {
+        return reservationRepository.findAllByOrderByReservedAtDesc().stream().map(this::mapReservation).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.List<ReservationResponse> getReservationsForEmail(String email) {
+        UserEntity user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("Utilisateur introuvable."));
+        return getUserReservations(user.getId());
     }
 
     @Transactional
@@ -103,6 +138,7 @@ public class DigitalAccessService {
         PhysicalLoan savedLoan = physicalLoanRepository.save(loan);
         ensureToken(user, book, DigitalAccessSourceType.LOAN, savedLoan.getId(), now, savedLoan.getDueAt());
 
+        notificationService.create(user.getEmail(), "loan_created", "Votre prêt pour « " + book.getTitle() + " » est enregistré.");
         return mapLoan(savedLoan);
     }
 
@@ -124,6 +160,21 @@ public class DigitalAccessService {
     }
 
     @Transactional
+    public LoanResponse returnLoan(Long loanId) {
+        PhysicalLoan loan = physicalLoanRepository.findById(loanId)
+                .orElseThrow(() -> new ResourceNotFoundException("Prêt introuvable."));
+        if (loan.getStatus() != PhysicalLoanStatus.BORROWED) {
+            throw new IllegalArgumentException("Ce prêt est déjà clôturé.");
+        }
+        loan.setStatus(PhysicalLoanStatus.RETURNED);
+        loan.setReturnedAt(LocalDateTime.now());
+        loan.getBook().setAvailableCopies(loan.getBook().getAvailableCopies() + 1);
+        bookRepository.save(loan.getBook());
+        notificationService.create(loan.getUser().getEmail(), "loan_returned", "Le retour de « " + loan.getBook().getTitle() + " » est enregistré.");
+        return mapLoan(physicalLoanRepository.save(loan));
+    }
+
+    @Transactional
     public ReservationResponse createReservation(ReservationRequest request) {
         LocalDateTime now = LocalDateTime.now();
         Reservation reservation = new Reservation();
@@ -132,7 +183,9 @@ public class DigitalAccessService {
         reservation.setStatus(ReservationStatus.WAITING);
         reservation.setReservedAt(now);
 
-        return mapReservation(reservationRepository.save(reservation));
+        Reservation saved = reservationRepository.save(reservation);
+        notificationService.create(null, "reservation_created", "Nouvelle réservation pour « " + saved.getBook().getTitle() + " ».");
+        return mapReservation(saved);
     }
 
     @Transactional
@@ -159,7 +212,20 @@ public class DigitalAccessService {
                 savedReservation.getPickupDeadline()
         );
 
+        notificationService.create(savedReservation.getUser().getEmail(), "reservation_ready", "Votre réservation pour « " + savedReservation.getBook().getTitle() + " » est disponible.");
         return mapReservation(savedReservation);
+    }
+
+    @Transactional
+    public ReservationResponse cancelReservation(Long reservationId) {
+        Reservation reservation = reservationRepository.findById(reservationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Réservation introuvable."));
+        if (reservation.getStatus() != ReservationStatus.WAITING) {
+            throw new IllegalArgumentException("Seule une réservation en attente peut être annulée.");
+        }
+        reservation.setStatus(ReservationStatus.CANCELED);
+        reservation.setCanceledAt(LocalDateTime.now());
+        return mapReservation(reservationRepository.save(reservation));
     }
 
     private DigitalAccessResponse fullAccessIfEligible(UserEntity user, BookEntity book, LocalDateTime now) {
