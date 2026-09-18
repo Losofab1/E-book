@@ -6,9 +6,9 @@ services:
     container_name: biblioth-db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: biblioth
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: change_me_strong_password
+      POSTGRES_DB: ${POSTGRES_DB:-biblioth}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
@@ -20,6 +20,8 @@ services:
       dockerfile: Dockerfile
     container_name: biblioth-app
     restart: unless-stopped
+    # .env.production supplies SPRING_MAIL_HOST, SPRING_MAIL_PORT,
+    # SPRING_MAIL_USERNAME and SPRING_MAIL_PASSWORD without storing secrets here.
     env_file:
       - .env.production
     depends_on:

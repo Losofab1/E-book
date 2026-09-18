@@ -1,4 +1,4 @@
-﻿name: CI
+name: CI
 
 on:
   push:
@@ -22,10 +22,10 @@ jobs:
           cache: maven
 
       - name: Run tests
-        run: mvn -f Biblioth/pom.xml test --no-transfer-progress
+        run: mvn -f PROJET_JAVA/Biblioth/pom.xml test --no-transfer-progress
 
       - name: Package application
-        run: mvn -f Biblioth/pom.xml clean package -DskipTests --no-transfer-progress
+        run: mvn -f PROJET_JAVA/Biblioth/pom.xml clean package -DskipTests --no-transfer-progress
 
       - name: Build Docker image
-        run: docker build -t biblioth:latest .
+        run: docker build -f PROJET_JAVA/Dockerfile -t biblioth:latest PROJET_JAVA
