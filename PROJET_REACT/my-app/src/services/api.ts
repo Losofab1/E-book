@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const rawBase = import.meta.env.VITE_API_BASE_URL || window.location.origin
+const rawBase = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'http://localhost:8080' : window.location.origin)
 const cleanBase = rawBase.trim().replace(/^\/+/, '').replace(/\/+$/, '')
 const finalBase = cleanBase.endsWith('/api') ? cleanBase : `${cleanBase}/api`
 
