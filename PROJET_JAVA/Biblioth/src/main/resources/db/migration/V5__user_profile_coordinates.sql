@@ -1,3 +1,2 @@
-ALTER TABLE users ADD COLUMN phone VARCHAR(30);
-ALTER TABLE users ADD COLUMN address VARCHAR(200);
-ALTER TABLE users ADD COLUMN city VARCHAR(100);
+-- Les colonnes phone, address et city existent déjà dans la base.
+-- Cette migration est conservée pour que Flyway enregistre V5.
