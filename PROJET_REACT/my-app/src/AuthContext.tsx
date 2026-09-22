@@ -34,8 +34,8 @@ const JWT_STORAGE_KEY = 'jwt_token'
 const MAX_LOGIN_ATTEMPTS = 5
 const LOCKOUT_DURATION_MS = 60_000
 
-const normalizeBackendRole = (role: string): Role => {
-  const value = role?.toUpperCase?.() ?? ''
+const normalizeBackendRole = (role: string | undefined | null): Role => {
+  const value = String(role ?? '').trim().toUpperCase()
 
   if (value === 'ADMIN') return 'admin'
   if (value === 'BIBLIOTHECAIRE') return 'bibliothecaire'

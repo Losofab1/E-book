@@ -16,7 +16,9 @@ const Register = () => {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!name || !email || !password || !role) {
+    setError('')
+
+    if (!name.trim() || !email.trim() || !password || !role) {
       setError('Veuillez remplir tous les champs.')
       return
     }
@@ -24,12 +26,15 @@ const Register = () => {
       setError('Le mot de passe doit contenir au moins 6 caractères.')
       return
     }
+
     const success = await auth.register(name, email, password, role)
     if (success) {
+      sessionStorage.setItem('losofab_auth_notice', 'Inscription réussie. Votre compte est prêt.')
       navigate('/profile')
-    } else {
-      setError('Cet email est déjà utilisé. Utilisez un autre compte.')
+      return
     }
+
+    setError('Impossible de créer le compte. Vérifiez vos informations ou essayez un autre email.')
   }
 
   const handlePasswordChange = (value: string) => {

@@ -12,7 +12,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 @Component
-@Profile({"local", "dev"})
+@Profile("test")
 public class DataSeeder implements CommandLineRunner {
     private final UserRepository userRepository;
     private final BookRepository bookRepository;

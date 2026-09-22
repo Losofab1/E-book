@@ -16,8 +16,10 @@ const RequireAuth = ({ children, allowedRole }: RequireAuthProps) => {
   }
 
   if (allowedRole) {
-    const roles = Array.isArray(allowedRole) ? allowedRole : [allowedRole]
-    if (!roles.includes(auth.user.role)) {
+    const roles = (Array.isArray(allowedRole) ? allowedRole : [allowedRole]).map((role) => role.toLowerCase())
+    const userRole = auth.user.role.toLowerCase()
+
+    if (!roles.includes(userRole)) {
       return <Navigate to="/" replace />
     }
   }

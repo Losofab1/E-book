@@ -7,7 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
-@org.springframework.context.annotation.Profile({"local","dev","test"})
+@org.springframework.context.annotation.Profile("test")
 public class SimpleLoggingEmailService implements EmailService {
     private static final Logger log = LoggerFactory.getLogger(SimpleLoggingEmailService.class);
 

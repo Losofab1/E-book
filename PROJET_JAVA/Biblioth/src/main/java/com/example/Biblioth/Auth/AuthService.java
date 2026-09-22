@@ -29,18 +29,28 @@ public class AuthService {
     }
 
     public AuthResponse register(RegisterRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("La requête d'inscription est obligatoire.");
+        }
+
         String email = normalizeEmail(request.getEmail());
         if (userRepository.existsByEmail(email)) {
             throw new IllegalArgumentException("Un utilisateur existe deja avec cet email.");
         }
 
+        String nom = safeTrim(request.getNom());
+        String prenom = safeTrim(request.getPrenom());
+        if (nom.isBlank() || prenom.isBlank()) {
+            throw new IllegalArgumentException("Le nom et le prénom sont obligatoires.");
+        }
+
         Role publicRole = resolvePublicRole(request.getRole());
 
         UserEntity user = new UserEntity();
-        user.setNom(request.getNom().trim());
-        user.setPrenom(request.getPrenom().trim());
+        user.setNom(nom);
+        user.setPrenom(prenom);
         user.setEmail(email);
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setPassword(passwordEncoder.encode(safeTrim(request.getPassword())));
         user.setRole(publicRole);
         user.setActif(true);
 
@@ -57,12 +67,19 @@ public class AuthService {
     }
 
     public AuthResponse login(LoginRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("La requête de connexion est obligatoire.");
+        }
+
         String email = normalizeEmail(request.getEmail());
+        String password = safeTrim(request.getPassword());
+
         authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(email, request.getPassword())
+                new UsernamePasswordAuthenticationToken(email, password)
         );
 
-        UserEntity user = userRepository.findByEmail(email).orElseThrow();
+        UserEntity user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("Email ou mot de passe incorrect."));
 
         return responseFor(user);
     }
@@ -72,6 +89,10 @@ public class AuthService {
             throw new IllegalArgumentException("L'email est obligatoire.");
         }
         return email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String safeTrim(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private AuthResponse responseFor(UserEntity user) {

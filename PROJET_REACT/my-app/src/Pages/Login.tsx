@@ -22,6 +22,7 @@ const Login = () => {
     setIsSubmitting(true)
 
     const result = await auth.login(email, password)
+
     if (result.success) {
       sessionStorage.setItem('losofab_auth_notice', 'Connexion réussie. Bienvenue dans votre espace.')
       const authenticatedUser = result.user
@@ -33,13 +34,11 @@ const Login = () => {
       } else {
         navigate('/profile', { replace: true })
       }
-    } else {
-      setError('Identifiants invalides ou compte temporairement bloqué. Réessayez plus tard.')
+      return
     }
-    if (!result.success) {
-      setError(result.message ?? 'Impossible de vous connecter. Réessayez plus tard.')
-      setIsSubmitting(false)
-    }
+
+    setError(result.message ?? 'Identifiants invalides ou compte temporairement bloqué. Réessayez plus tard.')
+    setIsSubmitting(false)
   }
 
   return (
