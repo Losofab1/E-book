@@ -2,6 +2,7 @@ package com.example.Biblioth.catalog;
 
 import com.example.Biblioth.Config.ResourceNotFoundException;
 import com.example.Biblioth.books.bookService.BookService;
+import com.example.Biblioth.digital.CatalogDocumentCirculationService;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -9,6 +10,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -18,7 +20,8 @@ public class CatalogController {
     private static final long MAX_SIZE = 25L * 1024 * 1024;
     private final CatalogDocumentRepository repository;
     private final BookService bookService;
-    public CatalogController(CatalogDocumentRepository repository, BookService bookService) { this.repository = repository; this.bookService = bookService; }
+    private final CatalogDocumentCirculationService circulationService;
+    public CatalogController(CatalogDocumentRepository repository, BookService bookService, CatalogDocumentCirculationService circulationService) { this.repository = repository; this.bookService = bookService; this.circulationService = circulationService; }
 
     @GetMapping
     public List<Map<String, Object>> list() {
@@ -40,8 +43,11 @@ public class CatalogController {
     }
 
     @GetMapping("/{id}/download")
-    public ResponseEntity<byte[]> download(@PathVariable Long id) {
+    public ResponseEntity<byte[]> download(@PathVariable Long id, Authentication authentication) {
         CatalogDocument document = repository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Catalogue introuvable."));
+        if (!circulationService.canAccess(id, authentication)) {
+            throw new AccessDeniedException("Un prêt actif ou une réservation disponible est nécessaire pour télécharger ce catalogue.");
+        }
         return ResponseEntity.ok().contentType(MediaType.parseMediaType(document.getContentType())).header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + document.getFileName().replace("\"", "") + "\"").body(document.getContent());
     }
 }
