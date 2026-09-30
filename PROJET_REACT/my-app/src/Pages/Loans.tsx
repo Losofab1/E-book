@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BookOpenText, CalendarClock, Check, RotateCcw, Search, UserRound } from 'lucide-react'
+import { BookOpenText, CalendarClock, RotateCcw, Search, UserRound } from 'lucide-react'
 import { api } from '../services/api'
 import { bookService } from '../services/bookService'
 import { catalogCirculationService, type CatalogDocument, type CatalogDocumentLoan } from '../services/catalogCirculationService'
@@ -8,6 +8,7 @@ import { useAuth } from '../AuthContext'
 import PageHeader from '../Components/ui/PageHeader'
 import Alert from '../Components/ui/Alert'
 import StatusBadge from '../Components/ui/StatusBadge'
+import DataTable, { type TableColumn } from '../Components/ui/DataTable'
 
 type Book = { id: number; title: string; author?: string; category?: string; availableCopies: number; active?: boolean }
 type User = { id: number; name: string; actif?: boolean }
@@ -23,8 +24,6 @@ const Loans = () => {
   const [users, setUsers] = useState<User[]>([])
   const [selectedBookUser, setSelectedBookUser] = useState('')
   const [selectedDocumentUser, setSelectedDocumentUser] = useState('')
-  const [selectedBook, setSelectedBook] = useState('')
-  const [selectedDocument, setSelectedDocument] = useState('')
   const [search, setSearch] = useState('')
   const [message, setMessage] = useState('')
   const [catalogError, setCatalogError] = useState('')
@@ -109,17 +108,16 @@ const Loans = () => {
   const filteredBooks = availableBooks.filter(book =>
     [book.title, book.author, book.category].some(value => value?.toLocaleLowerCase('fr').includes(searchTerm))
   )
-  const selectedBookDetails = books.find(book => String(book.id) === selectedBook)
-  const selectedDocumentDetails = documents.find(document => String(document.id) === selectedDocument)
-
-  const create = async () => {
-    if (!selectedBookUser || !selectedBook) return
+  const createBookLoan = async (bookId: number) => {
+    if (!selectedBookUser) {
+      setMessage('Sélectionnez d’abord un usager pour prêter cet ouvrage.')
+      return
+    }
     setSubmitting(true)
     setMessage('')
     try {
-      await loanService.create({ userId: Number(selectedBookUser), bookId: Number(selectedBook) })
+      await loanService.create({ userId: Number(selectedBookUser), bookId })
       setMessage('Prêt de l’ouvrage enregistré.')
-      setSelectedBook('')
       setSearch('')
       setRefreshKey(key => key + 1)
     } catch (error: any) {
@@ -129,14 +127,44 @@ const Loans = () => {
     }
   }
 
-  const createDocumentLoan = async () => {
-    if (!selectedDocumentUser || !selectedDocument) return
+  const bookStockColumns: TableColumn<Book>[] = [
+    {
+      key: 'title',
+      label: 'Ouvrage',
+      render: (book) => (
+        <span className="min-w-0">
+          <span className="block font-semibold">{book.title}</span>
+          <span className="mt-1 block text-sm text-slate-600">{[book.author, book.category].filter(Boolean).join(' · ') || 'Détails non renseignés'}</span>
+        </span>
+      ),
+    },
+    { key: 'copies', label: 'Ex.', render: (book) => <span className="font-medium text-primary-800">{book.availableCopies} ex.</span> },
+    {
+      key: 'action',
+      label: 'Prêt',
+      render: (book) => (
+        <button
+          type="button"
+          onClick={() => void createBookLoan(book.id)}
+          disabled={submitting}
+          className="btn-primary px-3 py-1.5 text-sm"
+        >
+          {submitting ? 'Enregistrement…' : 'Prêter'}
+        </button>
+      ),
+    },
+  ]
+
+  const createDocumentLoan = async (catalogDocumentId: number) => {
+    if (!selectedDocumentUser) {
+      setMessage('Sélectionnez d’abord un usager pour prêter ce catalogue.')
+      return
+    }
     setSubmitting(true)
     setMessage('')
     try {
-      await catalogCirculationService.createLoan({ userId: Number(selectedDocumentUser), catalogDocumentId: Number(selectedDocument) })
+      await catalogCirculationService.createLoan({ userId: Number(selectedDocumentUser), catalogDocumentId })
       setMessage('Emprunt du document enregistré.')
-      setSelectedDocument('')
       setRefreshKey(key => key + 1)
     } catch (error: any) {
       setMessage(error.response?.data?.message ?? 'Création du prêt de document impossible.')
@@ -144,6 +172,45 @@ const Loans = () => {
       setSubmitting(false)
     }
   }
+
+  const documentStockColumns: TableColumn<CatalogDocument>[] = [
+    {
+      key: 'name',
+      label: 'Catalogue',
+      render: (document) => (
+        <span className="min-w-0">
+          <span className="block font-semibold">{document.name}</span>
+          <span className="mt-1 block text-sm text-slate-600">
+            {document.contentType.includes('pdf') ? 'PDF' : 'CSV'}
+            {!document.available && document.dueAt ? ` · Retour le ${new Date(document.dueAt).toLocaleDateString('fr-FR')}` : ''}
+            {` · ${document.waitingReservations} réservation(s) en attente`}
+          </span>
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      label: 'Statut',
+      render: (document) => (document.available
+        ? <StatusBadge label="Disponible" variant="success" />
+        : <StatusBadge label="Emprunté" variant="warning" />),
+    },
+    {
+      key: 'action',
+      label: 'Prêt',
+      render: (document) => (
+        <button
+          type="button"
+          onClick={() => void createDocumentLoan(document.id)}
+          disabled={!document.available || submitting}
+          title={document.available ? 'Prêter ce catalogue' : 'Catalogue actuellement emprunté'}
+          className="btn-primary px-3 py-1.5 text-sm"
+        >
+          {submitting ? 'Enregistrement…' : 'Prêter'}
+        </button>
+      ),
+    },
+  ]
 
   const returnLoan = async (id: number) => {
     try {
@@ -216,7 +283,7 @@ const Loans = () => {
             </div>
           </div>
 
-          <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+          <div className="mt-5 grid gap-5">
             <div>
               <label htmlFor="loan-user" className="mb-2 block text-sm font-semibold">Usager</label>
               <div className="relative">
@@ -230,39 +297,30 @@ const Loans = () => {
             </div>
 
             <div>
-              <label htmlFor="catalog-search" className="mb-2 block text-sm font-semibold">Catalogue des ouvrages</label>
+              <label htmlFor="catalog-search" className="mb-2 block text-sm font-semibold">Stock des ouvrages ({filteredBooks.length})</label>
               <div className="relative">
                 <Search size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                 <input id="catalog-search" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Rechercher par titre, auteur ou catégorie" className="w-full rounded-md border border-slate-300 bg-white py-3 pl-10 pr-3 outline-none placeholder:text-slate-500 focus:border-green-700 focus:ring-2 focus:ring-green-700/20" />
               </div>
 
-              <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1" aria-label="Ouvrages disponibles">
-                {loadingCatalog && <p className="rounded-md bg-slate-50 p-4 text-sm text-slate-600">Chargement du catalogue…</p>}
-                {!loadingCatalog && catalogError && <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">{catalogError}</p>}
-                {!loadingCatalog && !catalogError && availableBooks.length === 0 && <p className="rounded-md bg-slate-50 p-4 text-sm text-slate-600">Aucun ouvrage disponible pour un nouveau prêt.</p>}
-                {!loadingCatalog && !catalogError && availableBooks.length > 0 && filteredBooks.length === 0 && <p className="rounded-md bg-slate-50 p-4 text-sm text-slate-600">Aucun ouvrage ne correspond à cette recherche.</p>}
-                {!loadingCatalog && !catalogError && filteredBooks.map(book => {
-                  const selected = selectedBook === String(book.id)
-                  return (
-                    <button key={book.id} type="button" aria-pressed={selected} onClick={() => setSelectedBook(String(book.id))} className={`flex w-full items-center justify-between gap-4 rounded-md border p-3 text-left transition-colors ${selected ? 'border-green-700 bg-green-50 ring-1 ring-green-700' : 'border-slate-200 bg-white hover:border-green-500 hover:bg-green-50/50'}`}>
-                      <span className="min-w-0">
-                        <span className="block truncate font-semibold">{book.title}</span>
-                        <span className="mt-1 block truncate text-sm text-slate-600">{[book.author, book.category].filter(Boolean).join(' · ') || 'Détails non renseignés'}</span>
-                      </span>
-                      <span className="shrink-0 text-right text-xs font-medium text-green-800">{book.availableCopies} ex.</span>
-                    </button>
-                  )
-                })}
+              <div className="mt-3">
+                {loadingCatalog && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement du catalogue…</p>}
+                {!loadingCatalog && catalogError && <Alert variant="error">{catalogError}</Alert>}
+                {!loadingCatalog && !catalogError && (
+                  <div className="table-card">
+                    <DataTable
+                      columns={bookStockColumns}
+                      data={filteredBooks}
+                      emptyMessage={availableBooks.length === 0 ? 'Aucun ouvrage disponible pour un nouveau prêt.' : 'Aucun ouvrage ne correspond à cette recherche.'}
+                      rowKey={(book) => String(book.id)}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
-            <p className="text-sm text-slate-600">{selectedBookDetails ? `Ouvrage choisi : ${selectedBookDetails.title}` : 'Aucun ouvrage sélectionné'}</p>
-            <button type="button" onClick={() => void create()} disabled={!selectedBookUser || !selectedBook || submitting || loadingCatalog || loadingUsers} className="inline-flex items-center gap-2 rounded-md bg-green-800 px-4 py-2.5 font-semibold text-white hover:bg-green-900 disabled:cursor-not-allowed disabled:bg-slate-300">
-              <Check size={18} />{submitting ? 'Enregistrement…' : 'Créer le prêt'}
-            </button>
-          </div>
+          <p className="mt-4 text-sm text-slate-600">Prêt direct : choisissez l’usager, puis cliquez sur <strong>Prêter</strong> dans le tableau (10 ouvrages par page, <strong>Voir plus</strong> pour la suite).</p>
         </section>
       )}
 
@@ -275,7 +333,7 @@ const Loans = () => {
             </div>
             <span className="text-sm text-slate-600">{documents.filter(document => document.available).length} disponible(s)</span>
           </div>
-          <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
+          <div className="mt-4 grid gap-4">
             <div>
               <label htmlFor="digital-loan-user" className="mb-2 block text-sm font-semibold">Usager</label>
               <select id="digital-loan-user" value={selectedDocumentUser} onChange={event => setSelectedDocumentUser(event.target.value)} disabled={loadingUsers || users.length === 0} className="w-full rounded-md border border-slate-300 bg-white p-3 outline-none focus:border-green-700 focus:ring-2 focus:ring-green-700/20 disabled:bg-slate-100">
@@ -283,45 +341,25 @@ const Loans = () => {
                 {users.filter(person => person.actif !== false).map(person => <option key={person.id} value={person.id}>{person.name}</option>)}
               </select>
             </div>
-            <div className="sm:col-span-2">
-              <span id="digital-document-label" className="mb-2 block text-sm font-semibold">Catalogue à prêter</span>
-              <div className="max-h-72 space-y-2 overflow-y-auto pr-1" role="group" aria-labelledby="digital-document-label">
+            <div>
+              <span id="digital-document-label" className="mb-2 block text-sm font-semibold">Stock des catalogues ({documents.length})</span>
+              <div aria-labelledby="digital-document-label">
                 {loadingDocuments && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement des catalogues…</p>}
                 {!loadingDocuments && documentsError && <Alert variant="error">{documentsError}</Alert>}
-                {!loadingDocuments && !documentsError && documents.length === 0 && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Aucun catalogue numérique importé.</p>}
-                {!loadingDocuments && !documentsError && documents.length > 0 && documents.every(document => !document.available) && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Tous les catalogues sont actuellement empruntés.</p>}
-                {!loadingDocuments && !documentsError && documents.map(document => {
-                  const selected = selectedDocument === String(document.id)
-                  return (
-                    <button
-                      key={document.id}
-                      type="button"
-                      aria-pressed={selected}
-                      disabled={!document.available}
-                      onClick={() => setSelectedDocument(String(document.id))}
-                      className={`flex w-full items-center justify-between gap-4 rounded-xl border p-3 text-left transition-colors ${selected ? 'border-primary-700 bg-primary-50 ring-1 ring-primary-700' : document.available ? 'border-slate-200 bg-white hover:border-primary-500 hover:bg-primary-50/50' : 'cursor-not-allowed border-slate-200 bg-slate-50'}`}
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate font-semibold">{document.name}</span>
-                        <span className="mt-1 block truncate text-sm text-slate-600">
-                          {document.contentType.includes('pdf') ? 'PDF' : 'CSV'}
-                          {!document.available && document.dueAt ? ` · Retour le ${new Date(document.dueAt).toLocaleDateString('fr-FR')}` : ''}
-                          {` · ${document.waitingReservations} réservation(s) en attente`}
-                        </span>
-                      </span>
-                      {document.available
-                        ? <StatusBadge label="Disponible" variant="success" />
-                        : <StatusBadge label="Emprunté" variant="warning" />}
-                    </button>
-                  )
-                })}
+                {!loadingDocuments && !documentsError && (
+                  <div className="table-card">
+                    <DataTable
+                      columns={documentStockColumns}
+                      data={documents}
+                      emptyMessage="Aucun catalogue numérique importé."
+                      rowKey={(document) => String(document.id)}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </div>
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-slate-600">{selectedDocumentDetails ? `Sélectionné : ${selectedDocumentDetails.name}` : 'Aucun catalogue sélectionné'}</p>
-            <button type="button" onClick={() => void createDocumentLoan()} disabled={!selectedDocumentUser || !selectedDocument || submitting || loadingDocuments || loadingUsers} className="rounded-md bg-green-800 px-4 py-2.5 font-semibold text-white hover:bg-green-900 disabled:cursor-not-allowed disabled:bg-slate-300">{submitting ? 'Enregistrement…' : 'Enregistrer le prêt numérique'}</button>
-          </div>
+          <p className="mt-4 text-sm text-slate-600">Prêt direct : choisissez l’usager, puis cliquez sur <strong>Prêter</strong> dans le tableau (10 catalogues par page, <strong>Voir plus</strong> pour la suite).</p>
         </section>
       )}
 
