@@ -91,7 +91,7 @@ const Loans = () => {
 
       if (staff) {
         try {
-          const response = await api.get<User[]>('/admin/users')
+          const response = await api.get<User[]>('/staff/borrowers')
           if (!cancelled) setUsers(response.data)
         } catch {
           if (!cancelled) setUsersError('Impossible de charger les usagers.')

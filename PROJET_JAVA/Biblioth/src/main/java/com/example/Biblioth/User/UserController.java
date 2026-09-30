@@ -4,6 +4,7 @@ import com.example.Biblioth.Config.ResourceNotFoundException;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -71,6 +72,19 @@ public class UserController {
     @GetMapping("/admin/users")
     public List<UserResponse> allUsers() {
         return userRepository.findAll().stream().map(UserResponse::from).toList();
+    }
+
+    @GetMapping("/staff/borrowers")
+    public List<Map<String, Object>> borrowers() {
+        return userRepository.findByActifTrue().stream()
+                .map(user -> {
+                    Map<String, Object> view = new java.util.LinkedHashMap<>();
+                    view.put("id", user.getId());
+                    view.put("name", (user.getNom() + " " + user.getPrenom()).trim());
+                    view.put("actif", user.isActif());
+                    return view;
+                })
+                .toList();
     }
 
     @PostMapping("/admin/users")
