@@ -66,12 +66,23 @@ export const catalogCirculationService = {
     return api.patch<CatalogDocumentReservation>(`/catalog-circulation/reservations/${id}/ready`)
   },
   async download(id: number, fileName: string) {
-    const response = await api.get<Blob>(`/catalogs/${id}/download`, { responseType: 'blob' })
-    const url = URL.createObjectURL(response.data)
+    const blob = await catalogCirculationService.fetchFullBlob(id)
+    const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
     link.download = fileName
     link.click()
     URL.revokeObjectURL(url)
+  },
+  getPublicAccess(id: number) {
+    return api.get<{ fullAccess: boolean }>(`/public/catalogs/${id}/access`)
+  },
+  async fetchPreviewBlob(id: number) {
+    const response = await api.get<Blob>(`/public/catalogs/${id}/preview`, { responseType: 'blob' })
+    return response.data
+  },
+  async fetchFullBlob(id: number) {
+    const response = await api.get<Blob>(`/catalogs/${id}/download`, { responseType: 'blob' })
+    return response.data
   },
 }

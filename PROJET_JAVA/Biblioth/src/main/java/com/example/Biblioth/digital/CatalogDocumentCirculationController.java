@@ -57,7 +57,9 @@ public class CatalogDocumentCirculationController {
 
     @PatchMapping("/loans/{loanId}/return")
     public ResponseEntity<CatalogDocumentLoanResponse> returnLoan(@PathVariable Long loanId, Authentication authentication) {
-        requireStaff(authentication);
+        if (!isStaff(authentication) && !circulationService.ownsLoan(loanId, authentication.getName())) {
+            throw new AccessDeniedException("Vous ne pouvez retourner que votre propre prêt.");
+        }
         return ResponseEntity.ok(circulationService.returnLoan(loanId));
     }
 

@@ -197,12 +197,20 @@ public class CatalogDocumentCirculationService {
     public CatalogDocumentReservationResponse cancelReservation(Long reservationId) {
         CatalogDocumentReservation reservation = reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Réservation de catalogue introuvable."));
-        if (reservation.getStatus() != ReservationStatus.WAITING) {
-            throw new IllegalArgumentException("Seule une réservation en attente peut être annulée.");
+        if (reservation.getStatus() != ReservationStatus.WAITING
+                && reservation.getStatus() != ReservationStatus.READY_FOR_PICKUP) {
+            throw new IllegalArgumentException("Seule une réservation en attente ou disponible peut être annulée.");
         }
         reservation.setStatus(ReservationStatus.CANCELED);
         reservation.setCanceledAt(LocalDateTime.now());
         return mapReservation(reservationRepository.save(reservation));
+    }
+
+    @Transactional(readOnly = true)
+    public boolean ownsLoan(Long loanId, String email) {
+        return loanRepository.findById(loanId)
+                .map(loan -> loan.getUser().getEmail().equalsIgnoreCase(email))
+                .orElse(true);
     }
 
     @Transactional(readOnly = true)

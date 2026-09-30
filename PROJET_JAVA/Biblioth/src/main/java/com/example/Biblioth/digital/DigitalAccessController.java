@@ -50,7 +50,9 @@ public class DigitalAccessController {
 
     @PatchMapping("/loans/{loanId}/return")
     public ResponseEntity<LoanResponse> returnLoan(@PathVariable Long loanId, Authentication authentication) {
-        requireStaff(authentication);
+        if (!isStaff(authentication) && !digitalAccessService.ownsLoan(loanId, authentication.getName())) {
+            throw new AccessDeniedException("Vous ne pouvez retourner que votre propre prêt.");
+        }
         return ResponseEntity.ok(digitalAccessService.returnLoan(loanId));
     }
 
@@ -75,7 +77,9 @@ public class DigitalAccessController {
 
     @PatchMapping("/reservations/{reservationId}/cancel")
     public ResponseEntity<ReservationResponse> cancelReservation(@PathVariable Long reservationId, Authentication authentication) {
-        requireStaff(authentication);
+        if (!isStaff(authentication) && !digitalAccessService.ownsReservation(reservationId, authentication.getName())) {
+            throw new AccessDeniedException("Vous ne pouvez annuler que votre propre réservation.");
+        }
         return ResponseEntity.ok(digitalAccessService.cancelReservation(reservationId));
     }
 

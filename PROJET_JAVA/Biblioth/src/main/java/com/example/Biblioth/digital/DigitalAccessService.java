@@ -220,12 +220,27 @@ public class DigitalAccessService {
     public ReservationResponse cancelReservation(Long reservationId) {
         Reservation reservation = reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Réservation introuvable."));
-        if (reservation.getStatus() != ReservationStatus.WAITING) {
-            throw new IllegalArgumentException("Seule une réservation en attente peut être annulée.");
+        if (reservation.getStatus() != ReservationStatus.WAITING
+                && reservation.getStatus() != ReservationStatus.READY_FOR_PICKUP) {
+            throw new IllegalArgumentException("Seule une réservation en attente ou disponible peut être annulée.");
         }
         reservation.setStatus(ReservationStatus.CANCELED);
         reservation.setCanceledAt(LocalDateTime.now());
         return mapReservation(reservationRepository.save(reservation));
+    }
+
+    @Transactional(readOnly = true)
+    public boolean ownsLoan(Long loanId, String email) {
+        return physicalLoanRepository.findById(loanId)
+                .map(loan -> loan.getUser().getEmail().equalsIgnoreCase(email))
+                .orElse(true);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean ownsReservation(Long reservationId, String email) {
+        return reservationRepository.findById(reservationId)
+                .map(reservation -> reservation.getUser().getEmail().equalsIgnoreCase(email))
+                .orElse(true);
     }
 
     private DigitalAccessResponse fullAccessIfEligible(UserEntity user, BookEntity book, LocalDateTime now) {

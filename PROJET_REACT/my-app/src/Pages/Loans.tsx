@@ -336,7 +336,7 @@ const Loans = () => {
         </div>
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
           <table className="min-w-full text-left">
-            <thead className="bg-slate-100 text-sm text-slate-700"><tr><th className="p-3">Ouvrage</th>{staff && <th className="p-3">Usager</th>}<th className="p-3">Échéance</th><th className="p-3">Statut</th>{staff && <th className="p-3">Actions</th>}</tr></thead>
+            <thead className="bg-slate-100 text-sm text-slate-700"><tr><th className="p-3">Ouvrage</th>{staff && <th className="p-3">Usager</th>}<th className="p-3">Échéance</th><th className="p-3">Statut</th><th className="p-3">Actions</th></tr></thead>
             <tbody>
               {!loadingLoans && !loansError && items.map(item => (
                 <tr key={item.id} className="border-t border-slate-200">
@@ -348,11 +348,11 @@ const Loans = () => {
                     : item.status === 'RETURNED'
                       ? <StatusBadge label="Rendu" variant="success" />
                       : <StatusBadge label={item.status} variant="neutral" />}</td>
-                  {staff && <td className="p-3"><div className="flex flex-wrap gap-3">{item.status === 'BORROWED' && <><button type="button" onClick={() => void extendLoan(item)} className="inline-flex items-center gap-1 text-sm font-medium text-blue-800 hover:underline"><CalendarClock size={16} />Prolonger</button><button type="button" onClick={() => void returnLoan(item.id)} className="inline-flex items-center gap-1 text-sm font-medium text-green-800 hover:underline"><RotateCcw size={16} />Retour</button></>}</div></td>}
+                  <td className="p-3"><div className="flex flex-wrap gap-3">{item.status === 'BORROWED' && <>{staff && <button type="button" onClick={() => void extendLoan(item)} className="inline-flex items-center gap-1 text-sm font-medium text-blue-800 hover:underline"><CalendarClock size={16} />Prolonger</button>}<button type="button" onClick={() => void returnLoan(item.id)} className="inline-flex items-center gap-1 text-sm font-medium text-green-800 hover:underline"><RotateCcw size={16} />Retour</button></>}</div></td>
                 </tr>
               ))}
-              {!loadingLoans && !loansError && items.length === 0 && <tr><td colSpan={staff ? 5 : 3} className="p-8 text-center text-slate-600">Aucun prêt à afficher.</td></tr>}
-              {loadingLoans && <tr><td colSpan={staff ? 5 : 3} className="p-8 text-center text-slate-600">Chargement des prêts…</td></tr>}
+              {!loadingLoans && !loansError && items.length === 0 && <tr><td colSpan={staff ? 5 : 4} className="p-8 text-center text-slate-600">Aucun prêt à afficher.</td></tr>}
+              {loadingLoans && <tr><td colSpan={staff ? 5 : 4} className="p-8 text-center text-slate-600">Chargement des prêts…</td></tr>}
             </tbody>
           </table>
         </div>
@@ -366,7 +366,7 @@ const Loans = () => {
         {documentLoansError && <Alert variant="error" className="mb-3">{documentLoansError}</Alert>}
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
           <table className="min-w-full text-left">
-            <thead className="bg-slate-100 text-sm text-slate-700"><tr><th className="p-3">Document</th>{staff && <th className="p-3">Usager</th>}<th className="p-3">Échéance</th><th className="p-3">Statut</th><th className="p-3">Fichier</th>{staff && <th className="p-3">Actions</th>}</tr></thead>
+            <thead className="bg-slate-100 text-sm text-slate-700"><tr><th className="p-3">Document</th>{staff && <th className="p-3">Usager</th>}<th className="p-3">Échéance</th><th className="p-3">Statut</th>{staff && <th className="p-3">Fichier</th>}<th className="p-3">Actions</th></tr></thead>
             <tbody>
               {!loadingDocumentLoans && !documentLoansError && documentLoans.map(item => <tr key={item.id} className="border-t border-slate-200">
                 <td className="p-3 font-medium">{item.catalogDocumentName}</td>
@@ -375,8 +375,8 @@ const Loans = () => {
                 <td className="p-3">{item.status === 'BORROWED'
                   ? <StatusBadge label="En cours" variant="warning" />
                   : <StatusBadge label="Rendu" variant="success" />}</td>
-                <td className="p-3">{item.status === 'BORROWED' && <button type="button" onClick={() => void downloadDocument(item.catalogDocumentId, item.catalogDocumentName)} className="font-medium text-green-800 hover:underline">Télécharger</button>}</td>
-                {staff && <td className="p-3"><div className="flex flex-wrap gap-3">{item.status === 'BORROWED' && <><button type="button" onClick={() => void extendDocumentLoan(item)} className="text-sm font-medium text-blue-800 hover:underline">Prolonger</button><button type="button" onClick={() => void returnDocumentLoan(item.id)} className="text-sm font-medium text-green-800 hover:underline">Retour</button></>}</div></td>}
+                {staff && <td className="p-3">{item.status === 'BORROWED' && <button type="button" onClick={() => void downloadDocument(item.catalogDocumentId, item.catalogDocumentName)} className="font-medium text-green-800 hover:underline">Télécharger</button>}</td>}
+                <td className="p-3"><div className="flex flex-wrap gap-3">{item.status === 'BORROWED' && <>{staff && <button type="button" onClick={() => void extendDocumentLoan(item)} className="text-sm font-medium text-blue-800 hover:underline">Prolonger</button>}<button type="button" onClick={() => void returnDocumentLoan(item.id)} className="text-sm font-medium text-green-800 hover:underline">Retour</button></>}</div></td>
               </tr>)}
               {!loadingDocumentLoans && !documentLoansError && documentLoans.length === 0 && <tr><td colSpan={staff ? 6 : 4} className="p-8 text-center text-slate-600">Aucun prêt de catalogue numérique.</td></tr>}
               {loadingDocumentLoans && <tr><td colSpan={staff ? 6 : 4} className="p-8 text-center text-slate-600">Chargement des prêts numériques…</td></tr>}

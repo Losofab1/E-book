@@ -55,6 +55,10 @@ const Reservations = () => {
     catch (error: any) { setMessage(error.response?.data?.message ?? 'Réservation impossible.') }
   }
   const ready = async (id: number) => { try { await reservationService.ready(id); setMessage('Réservation disponible pour retrait.'); await reload() } catch { setMessage('Opération impossible.') } }
+  const cancelBook = async (id: number) => {
+    try { await reservationService.cancel(String(id)); setMessage('Réservation annulée.'); await reload() }
+    catch { setMessage('Annulation impossible.') }
+  }
   const reserveDocument = async (id: number) => {
     if (!user) return
     setDocumentId(id)
@@ -72,10 +76,6 @@ const Reservations = () => {
   const cancelDocument = async (id: number) => {
     try { await catalogCirculationService.cancelReservation(id); setMessage('Réservation annulée.'); await reload() }
     catch { setMessage('Annulation impossible.') }
-  }
-  const downloadDocument = async (id: number, name: string) => {
-    try { await catalogCirculationService.download(id, name) }
-    catch { setMessage('Téléchargement impossible. La période de mise à disposition a peut-être expiré.') }
   }
   const digitalColumns: TableColumn<CatalogDocumentReservation>[] = [
     { key: 'document', label: 'Document', render: (item) => <span className="font-medium">{item.catalogDocumentName}</span> },
@@ -96,7 +96,7 @@ const Reservations = () => {
         <div className="flex flex-wrap gap-3">
           {staff && item.status === 'WAITING' && <button type="button" onClick={() => void readyDocument(item.id)} className="text-sm font-medium text-primary-800 hover:underline">Rendre disponible</button>}
           {!staff && item.status === 'WAITING' && item.userId === user?.id && <button type="button" onClick={() => void cancelDocument(item.id)} className="text-sm font-medium text-red-700 hover:underline">Annuler</button>}
-          {!staff && item.status === 'READY_FOR_PICKUP' && item.userId === user?.id && <button type="button" onClick={() => void downloadDocument(item.catalogDocumentId, item.catalogDocumentName)} className="text-sm font-medium text-primary-800 hover:underline">Télécharger</button>}
+          {!staff && item.status === 'READY_FOR_PICKUP' && item.userId === user?.id && <button type="button" onClick={() => void cancelDocument(item.id)} className="text-sm font-medium text-red-700 hover:underline">Annuler</button>}
         </div>
       ),
     },
@@ -113,13 +113,16 @@ const Reservations = () => {
       },
     },
     { key: 'date', label: 'Date', render: (item) => <span className="whitespace-nowrap">{new Date(item.reservedAt).toLocaleDateString('fr-FR')}</span> },
-    ...(staff ? [{
+    {
       key: 'action',
       label: 'Action',
-      render: (item: Reservation) => (item.status === 'WAITING'
-        ? <button type="button" onClick={() => void ready(item.id)} className="text-sm font-medium text-primary-800 hover:underline">Rendre disponible</button>
-        : null),
-    } as TableColumn<Reservation>] : []),
+      render: (item) => (
+        <div className="flex flex-wrap gap-3">
+          {staff && item.status === 'WAITING' && <button type="button" onClick={() => void ready(item.id)} className="text-sm font-medium text-primary-800 hover:underline">Rendre disponible</button>}
+          {!staff && (item.status === 'WAITING' || item.status === 'READY_FOR_PICKUP') && item.userId === user?.id && <button type="button" onClick={() => void cancelBook(item.id)} className="text-sm font-medium text-red-700 hover:underline">Annuler</button>}
+        </div>
+      ),
+    },
   ]
 
   return <section className="page">
