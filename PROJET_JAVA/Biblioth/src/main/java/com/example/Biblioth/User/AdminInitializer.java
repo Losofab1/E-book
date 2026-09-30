@@ -37,21 +37,35 @@ public class AdminInitializer implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) throws Exception {
+        boolean usingDefaults = (adminEmail == null || adminEmail.isBlank())
+                || (adminPassword == null || adminPassword.isBlank());
+
         String effectiveEmail = (adminEmail == null || adminEmail.isBlank())
-                ? "admin@losofab"
+                ? "fabricelodjou014@gmail.com"
                 : adminEmail.trim().toLowerCase(Locale.ROOT);
 
         String effectivePassword = (adminPassword == null || adminPassword.isBlank())
-                ? "Admin123!"
+                ? "Admin12345!"
                 : adminPassword.trim();
 
-        if (userRepository.existsByEmail(effectiveEmail)) {
-            logger.info("AdminInitializer: admin already exists for email {} - skipping.", effectiveEmail);
+        var existing = userRepository.findByEmail(effectiveEmail);
+        if (existing.isPresent()) {
+            UserEntity admin = existing.get();
+            boolean passwordConfigured = adminPassword != null && !adminPassword.isBlank();
+            if (passwordConfigured && !passwordEncoder.matches(effectivePassword, admin.getPassword())) {
+                admin.setPassword(passwordEncoder.encode(effectivePassword));
+                admin.setRole(Role.ADMIN);
+                admin.setActif(true);
+                userRepository.save(admin);
+                logger.info("AdminInitializer: admin password resynchronised for email {}", effectiveEmail);
+            } else {
+                logger.info("AdminInitializer: admin already exists for email {} - skipping.", effectiveEmail);
+            }
             return;
         }
 
-        if (adminEmail == null || adminEmail.isBlank()) {
-            logger.warn("AdminInitializer: ADMIN_EMAIL not configured. Using default admin credentials: {} / {}", effectiveEmail, effectivePassword);
+        if (usingDefaults) {
+            logger.warn("AdminInitializer: ADMIN_EMAIL/ADMIN_PASSWORD not fully configured. Using default admin {}", effectiveEmail);
         }
 
         UserEntity admin = new UserEntity();

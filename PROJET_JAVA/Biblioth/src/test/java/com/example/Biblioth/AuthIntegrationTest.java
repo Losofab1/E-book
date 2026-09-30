@@ -104,7 +104,7 @@ class AuthIntegrationTest {
     void shouldCreateDefaultAdminWhenNoEnvironmentVariablesAreConfigured() throws Exception {
         UserRepository repository = mock(UserRepository.class);
         PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
-        when(repository.existsByEmail("admin@losofab")).thenReturn(false);
+        when(repository.findByEmail("admin@losofab")).thenReturn(java.util.Optional.empty());
         when(repository.save(any(UserEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         AdminInitializer adminInitializer = new AdminInitializer(repository, passwordEncoder);
