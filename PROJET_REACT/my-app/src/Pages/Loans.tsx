@@ -5,6 +5,9 @@ import { bookService } from '../services/bookService'
 import { catalogCirculationService, type CatalogDocument, type CatalogDocumentLoan } from '../services/catalogCirculationService'
 import { loanService } from '../services/loanService'
 import { useAuth } from '../AuthContext'
+import PageHeader from '../Components/ui/PageHeader'
+import Alert from '../Components/ui/Alert'
+import StatusBadge from '../Components/ui/StatusBadge'
 
 type Book = { id: number; title: string; author?: string; category?: string; availableCopies: number; active?: boolean }
 type User = { id: number; name: string; actif?: boolean }
@@ -18,7 +21,8 @@ const Loans = () => {
   const [documents, setDocuments] = useState<CatalogDocument[]>([])
   const [documentLoans, setDocumentLoans] = useState<CatalogDocumentLoan[]>([])
   const [users, setUsers] = useState<User[]>([])
-  const [selectedUser, setSelectedUser] = useState('')
+  const [selectedBookUser, setSelectedBookUser] = useState('')
+  const [selectedDocumentUser, setSelectedDocumentUser] = useState('')
   const [selectedBook, setSelectedBook] = useState('')
   const [selectedDocument, setSelectedDocument] = useState('')
   const [search, setSearch] = useState('')
@@ -109,11 +113,11 @@ const Loans = () => {
   const selectedDocumentDetails = documents.find(document => String(document.id) === selectedDocument)
 
   const create = async () => {
-    if (!selectedUser || !selectedBook) return
+    if (!selectedBookUser || !selectedBook) return
     setSubmitting(true)
     setMessage('')
     try {
-      await loanService.create({ userId: Number(selectedUser), bookId: Number(selectedBook) })
+      await loanService.create({ userId: Number(selectedBookUser), bookId: Number(selectedBook) })
       setMessage('Prêt de l’ouvrage enregistré.')
       setSelectedBook('')
       setSearch('')
@@ -126,11 +130,11 @@ const Loans = () => {
   }
 
   const createDocumentLoan = async () => {
-    if (!selectedUser || !selectedDocument) return
+    if (!selectedDocumentUser || !selectedDocument) return
     setSubmitting(true)
     setMessage('')
     try {
-      await catalogCirculationService.createLoan({ userId: Number(selectedUser), catalogDocumentId: Number(selectedDocument) })
+      await catalogCirculationService.createLoan({ userId: Number(selectedDocumentUser), catalogDocumentId: Number(selectedDocument) })
       setMessage('Emprunt du document enregistré.')
       setSelectedDocument('')
       setRefreshKey(key => key + 1)
@@ -194,15 +198,13 @@ const Loans = () => {
   }
 
   return (
-    <section className="mx-auto max-w-6xl px-4 py-10 text-slate-900 sm:px-6">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-wide text-green-800">Bibliothèque</p>
-          <h1 className="mt-1 text-3xl font-bold">{staff ? 'Gestion des prêts' : 'Mes emprunts'}</h1>
-          <p className="mt-2 text-slate-600">{staff ? 'Prêtez des ouvrages ou des catalogues PDF/CSV.' : 'Consultez vos prêts et téléchargez les catalogues empruntés.'}</p>
-        </div>
-        {staff && <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm font-medium text-green-900">{availableBooks.length + documents.filter(document => document.available).length} ressource(s) disponible(s)</div>}
-      </header>
+    <section className="page">
+      <PageHeader
+        eyebrow="Bibliothèque"
+        title={staff ? 'Gestion des prêts' : 'Mes emprunts'}
+        description={staff ? 'Prêtez des ouvrages ou des catalogues PDF/CSV.' : 'Consultez vos prêts et téléchargez les catalogues empruntés.'}
+        extra={staff && <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm font-medium text-green-900">{availableBooks.length + documents.filter(document => document.available).length} ressource(s) disponible(s)</div>}
+      />
 
       {staff && (
         <section className="mt-7 border-y border-slate-200 py-6" aria-labelledby="new-loan-title">
@@ -219,7 +221,7 @@ const Loans = () => {
               <label htmlFor="loan-user" className="mb-2 block text-sm font-semibold">Usager</label>
               <div className="relative">
                 <UserRound size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                <select id="loan-user" value={selectedUser} onChange={event => setSelectedUser(event.target.value)} disabled={loadingUsers || users.length === 0} className="w-full rounded-md border border-slate-300 bg-white py-3 pl-10 pr-3 outline-none focus:border-green-700 focus:ring-2 focus:ring-green-700/20 disabled:bg-slate-100">
+                <select id="loan-user" value={selectedBookUser} onChange={event => setSelectedBookUser(event.target.value)} disabled={loadingUsers || users.length === 0} className="w-full rounded-md border border-slate-300 bg-white py-3 pl-10 pr-3 outline-none focus:border-green-700 focus:ring-2 focus:ring-green-700/20 disabled:bg-slate-100">
                   <option value="">{loadingUsers ? 'Chargement des usagers…' : 'Sélectionner un usager'}</option>
                   {users.filter(person => person.actif !== false).map(person => <option key={person.id} value={person.id}>{person.name}</option>)}
                 </select>
@@ -257,7 +259,7 @@ const Loans = () => {
 
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
             <p className="text-sm text-slate-600">{selectedBookDetails ? `Ouvrage choisi : ${selectedBookDetails.title}` : 'Aucun ouvrage sélectionné'}</p>
-            <button type="button" onClick={() => void create()} disabled={!selectedUser || !selectedBook || submitting || loadingCatalog || loadingUsers} className="inline-flex items-center gap-2 rounded-md bg-green-800 px-4 py-2.5 font-semibold text-white hover:bg-green-900 disabled:cursor-not-allowed disabled:bg-slate-300">
+            <button type="button" onClick={() => void create()} disabled={!selectedBookUser || !selectedBook || submitting || loadingCatalog || loadingUsers} className="inline-flex items-center gap-2 rounded-md bg-green-800 px-4 py-2.5 font-semibold text-white hover:bg-green-900 disabled:cursor-not-allowed disabled:bg-slate-300">
               <Check size={18} />{submitting ? 'Enregistrement…' : 'Créer le prêt'}
             </button>
           </div>
@@ -276,31 +278,56 @@ const Loans = () => {
           <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
             <div>
               <label htmlFor="digital-loan-user" className="mb-2 block text-sm font-semibold">Usager</label>
-              <select id="digital-loan-user" value={selectedUser} onChange={event => setSelectedUser(event.target.value)} disabled={loadingUsers || users.length === 0} className="w-full rounded-md border border-slate-300 bg-white p-3 outline-none focus:border-green-700 focus:ring-2 focus:ring-green-700/20 disabled:bg-slate-100">
+              <select id="digital-loan-user" value={selectedDocumentUser} onChange={event => setSelectedDocumentUser(event.target.value)} disabled={loadingUsers || users.length === 0} className="w-full rounded-md border border-slate-300 bg-white p-3 outline-none focus:border-green-700 focus:ring-2 focus:ring-green-700/20 disabled:bg-slate-100">
                 <option value="">{loadingUsers ? 'Chargement des usagers…' : 'Sélectionner un usager'}</option>
                 {users.filter(person => person.actif !== false).map(person => <option key={person.id} value={person.id}>{person.name}</option>)}
               </select>
             </div>
-            <div>
-              <label htmlFor="digital-document" className="mb-2 block text-sm font-semibold">Catalogue à prêter</label>
-              <select id="digital-document" value={selectedDocument} onChange={event => setSelectedDocument(event.target.value)} disabled={loadingDocuments || documents.filter(document => document.available).length === 0} className="w-full rounded-md border border-slate-300 bg-white p-3 outline-none focus:border-green-700 focus:ring-2 focus:ring-green-700/20 disabled:bg-slate-100">
-                <option value="">{loadingDocuments ? 'Chargement des catalogues…' : 'Sélectionner un catalogue PDF ou CSV'}</option>
-                {documents.filter(document => document.available).map(document => <option key={document.id} value={document.id}>{document.name} · {document.contentType.includes('pdf') ? 'PDF' : 'CSV'}</option>)}
-              </select>
-              {documentsError && <p role="alert" className="mt-2 text-sm text-red-700">{documentsError}</p>}
-              {!loadingDocuments && !documentsError && documents.length === 0 && <p className="mt-2 text-sm text-slate-600">Aucun catalogue numérique importé.</p>}
+            <div className="sm:col-span-2">
+              <span id="digital-document-label" className="mb-2 block text-sm font-semibold">Catalogue à prêter</span>
+              <div className="max-h-72 space-y-2 overflow-y-auto pr-1" role="group" aria-labelledby="digital-document-label">
+                {loadingDocuments && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement des catalogues…</p>}
+                {!loadingDocuments && documentsError && <Alert variant="error">{documentsError}</Alert>}
+                {!loadingDocuments && !documentsError && documents.length === 0 && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Aucun catalogue numérique importé.</p>}
+                {!loadingDocuments && !documentsError && documents.length > 0 && documents.every(document => !document.available) && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Tous les catalogues sont actuellement empruntés.</p>}
+                {!loadingDocuments && !documentsError && documents.map(document => {
+                  const selected = selectedDocument === String(document.id)
+                  return (
+                    <button
+                      key={document.id}
+                      type="button"
+                      aria-pressed={selected}
+                      disabled={!document.available}
+                      onClick={() => setSelectedDocument(String(document.id))}
+                      className={`flex w-full items-center justify-between gap-4 rounded-xl border p-3 text-left transition-colors ${selected ? 'border-primary-700 bg-primary-50 ring-1 ring-primary-700' : document.available ? 'border-slate-200 bg-white hover:border-primary-500 hover:bg-primary-50/50' : 'cursor-not-allowed border-slate-200 bg-slate-50'}`}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold">{document.name}</span>
+                        <span className="mt-1 block truncate text-sm text-slate-600">
+                          {document.contentType.includes('pdf') ? 'PDF' : 'CSV'}
+                          {!document.available && document.dueAt ? ` · Retour le ${new Date(document.dueAt).toLocaleDateString('fr-FR')}` : ''}
+                          {` · ${document.waitingReservations} réservation(s) en attente`}
+                        </span>
+                      </span>
+                      {document.available
+                        ? <StatusBadge label="Disponible" variant="success" />
+                        : <StatusBadge label="Emprunté" variant="warning" />}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           </div>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-slate-600">{selectedDocumentDetails ? `Sélectionné : ${selectedDocumentDetails.name}` : 'Aucun catalogue sélectionné'}</p>
-            <button type="button" onClick={() => void createDocumentLoan()} disabled={!selectedUser || !selectedDocument || submitting || loadingDocuments || loadingUsers} className="rounded-md bg-green-800 px-4 py-2.5 font-semibold text-white hover:bg-green-900 disabled:cursor-not-allowed disabled:bg-slate-300">{submitting ? 'Enregistrement…' : 'Enregistrer le prêt numérique'}</button>
+            <button type="button" onClick={() => void createDocumentLoan()} disabled={!selectedDocumentUser || !selectedDocument || submitting || loadingDocuments || loadingUsers} className="rounded-md bg-green-800 px-4 py-2.5 font-semibold text-white hover:bg-green-900 disabled:cursor-not-allowed disabled:bg-slate-300">{submitting ? 'Enregistrement…' : 'Enregistrer le prêt numérique'}</button>
           </div>
         </section>
       )}
 
-      {catalogError && !staff && <p role="alert" className="mt-5 rounded-md border border-red-200 bg-red-50 p-4 text-red-800">{catalogError}</p>}
-      {loansError && <p role="alert" className="mt-5 rounded-md border border-red-200 bg-red-50 p-4 text-red-800">{loansError}</p>}
-      {message && <p role="status" className="mt-5 rounded-md border border-slate-200 bg-white p-4 text-slate-800">{message}</p>}
+      {catalogError && !staff && <Alert variant="error">{catalogError}</Alert>}
+      {loansError && <Alert variant="error">{loansError}</Alert>}
+      {message && <Alert>{message}</Alert>}
 
       <section className="mt-7" aria-labelledby="loan-list-title">
         <div className="mb-3 flex items-center justify-between gap-4">
@@ -316,7 +343,11 @@ const Loans = () => {
                   <td className="p-3 font-medium">{books.find(book => book.id === item.bookId)?.title ?? `Livre #${item.bookId}`}</td>
                   {staff && <td className="p-3">{users.find(person => person.id === item.userId)?.name ?? `Usager #${item.userId}`}</td>}
                   <td className="whitespace-nowrap p-3">{new Date(item.dueAt).toLocaleDateString('fr-FR')}</td>
-                  <td className="p-3"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${item.status === 'BORROWED' ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-700'}`}>{item.status === 'BORROWED' ? 'En cours' : item.status === 'RETURNED' ? 'Rendu' : item.status}</span></td>
+                  <td className="p-3">{item.status === 'BORROWED'
+                    ? <StatusBadge label="En cours" variant="warning" />
+                    : item.status === 'RETURNED'
+                      ? <StatusBadge label="Rendu" variant="success" />
+                      : <StatusBadge label={item.status} variant="neutral" />}</td>
                   {staff && <td className="p-3"><div className="flex flex-wrap gap-3">{item.status === 'BORROWED' && <><button type="button" onClick={() => void extendLoan(item)} className="inline-flex items-center gap-1 text-sm font-medium text-blue-800 hover:underline"><CalendarClock size={16} />Prolonger</button><button type="button" onClick={() => void returnLoan(item.id)} className="inline-flex items-center gap-1 text-sm font-medium text-green-800 hover:underline"><RotateCcw size={16} />Retour</button></>}</div></td>}
                 </tr>
               ))}
@@ -332,7 +363,7 @@ const Loans = () => {
           <h2 id="document-loan-list-title" className="text-xl font-bold">Prêts de catalogues PDF/CSV</h2>
           <span className="text-sm text-slate-600">{loadingDocumentLoans ? 'Chargement…' : `${documentLoans.length} prêt${documentLoans.length === 1 ? '' : 's'}`}</span>
         </div>
-        {documentLoansError && <p role="alert" className="mb-3 rounded-md border border-red-200 bg-red-50 p-4 text-red-800">{documentLoansError}</p>}
+        {documentLoansError && <Alert variant="error" className="mb-3">{documentLoansError}</Alert>}
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
           <table className="min-w-full text-left">
             <thead className="bg-slate-100 text-sm text-slate-700"><tr><th className="p-3">Document</th>{staff && <th className="p-3">Usager</th>}<th className="p-3">Échéance</th><th className="p-3">Statut</th><th className="p-3">Fichier</th>{staff && <th className="p-3">Actions</th>}</tr></thead>
@@ -341,7 +372,9 @@ const Loans = () => {
                 <td className="p-3 font-medium">{item.catalogDocumentName}</td>
                 {staff && <td className="p-3">{item.userName}</td>}
                 <td className="whitespace-nowrap p-3">{new Date(item.dueAt).toLocaleDateString('fr-FR')}</td>
-                <td className="p-3">{item.status === 'BORROWED' ? 'En cours' : 'Rendu'}</td>
+                <td className="p-3">{item.status === 'BORROWED'
+                  ? <StatusBadge label="En cours" variant="warning" />
+                  : <StatusBadge label="Rendu" variant="success" />}</td>
                 <td className="p-3">{item.status === 'BORROWED' && <button type="button" onClick={() => void downloadDocument(item.catalogDocumentId, item.catalogDocumentName)} className="font-medium text-green-800 hover:underline">Télécharger</button>}</td>
                 {staff && <td className="p-3"><div className="flex flex-wrap gap-3">{item.status === 'BORROWED' && <><button type="button" onClick={() => void extendDocumentLoan(item)} className="text-sm font-medium text-blue-800 hover:underline">Prolonger</button><button type="button" onClick={() => void returnDocumentLoan(item.id)} className="text-sm font-medium text-green-800 hover:underline">Retour</button></>}</div></td>}
               </tr>)}

@@ -4,8 +4,19 @@ import { bookService } from '../services/bookService'
 import { catalogCirculationService } from '../services/catalogCirculationService'
 import { api } from '../services/api'
 import { useAuth } from '../AuthContext'
+import DataTable, { type TableColumn } from '../Components/ui/DataTable'
+import PageHeader from '../Components/ui/PageHeader'
+import Alert from '../Components/ui/Alert'
 
 type Book = { id: number; title: string; author: string; isbn: string; category: string; availableCopies: number }
+
+const bookColumns: TableColumn<Book>[] = [
+  { key: 'title', label: 'Titre', render: (book) => <span className="font-semibold">{book.title}</span> },
+  { key: 'author', label: 'Auteur' },
+  { key: 'isbn', label: 'ISBN' },
+  { key: 'category', label: 'Catégorie' },
+  { key: 'availableCopies', label: 'Disponibles' },
+]
 
 const Catalog = () => {
   const { user } = useAuth()
@@ -40,13 +51,16 @@ const Catalog = () => {
     catch { setMessage('Téléchargement impossible.') }
   }
 
-  return <section className="mx-auto max-w-6xl px-4 py-10 text-slate-900">
-    <div className="flex flex-wrap items-center justify-between gap-4"><div><h1 className="text-3xl font-bold">Catalogue</h1><p className="mt-1 text-slate-600">Données centralisées sur le serveur.</p></div>
-      {canImport && <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-green-700 px-4 py-2 font-semibold text-white"><Upload size={18} />Importer un catalogue<input className="hidden" type="file" accept=".csv,.pdf,text/csv,application/pdf" onChange={upload} /></label>}
-    </div>
-    {message && <p role="status" className="mt-4 rounded-lg bg-white p-3 shadow">{message}</p>}
-    <div className="mt-5 rounded-xl bg-white p-4 shadow"><h2 className="font-bold">Documents importés</h2><div className="mt-3 flex flex-wrap gap-2">{documents.map(document => <button key={document.id} type="button" onClick={() => void download(document)} className="inline-flex items-center gap-2 rounded border px-3 py-2 text-green-700"><Download size={16} />{document.name}</button>)}{documents.length === 0 && <p className="text-slate-500">Aucun document importé.</p>}</div></div>
-    <div className="mt-6 overflow-x-auto rounded-2xl bg-white shadow"><table className="min-w-full text-left"><thead className="bg-slate-100"><tr><th className="p-3">Titre</th><th className="p-3">Auteur</th><th className="p-3">ISBN</th><th className="p-3">Catégorie</th><th className="p-3">Disponibles</th></tr></thead><tbody>{!loading && books.map(book => <tr className="border-t" key={book.id}><td className="p-3 font-semibold">{book.title}</td><td className="p-3">{book.author}</td><td className="p-3">{book.isbn}</td><td className="p-3">{book.category}</td><td className="p-3">{book.availableCopies}</td></tr>)}</tbody></table>{loading && <p className="p-4">Chargement…</p>}</div>
+  return <section className="page">
+    <PageHeader
+      eyebrow="Bibliothèque"
+      title="Catalogue"
+      description="Données centralisées sur le serveur."
+      extra={canImport && <label className="btn-primary"><Upload size={18} />Importer un catalogue<input className="hidden" type="file" accept=".csv,.pdf,text/csv,application/pdf" onChange={upload} /></label>}
+    />
+    {message && <Alert>{message}</Alert>}
+    <div className="card mt-5"><h2 className="font-bold">Documents importés</h2><div className="mt-3 flex flex-wrap gap-2">{documents.map(document => <button key={document.id} type="button" onClick={() => void download(document)} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-primary-800 hover:border-primary-700 hover:bg-primary-50"><Download size={16} />{document.name}</button>)}{documents.length === 0 && <p className="text-slate-500">Aucun document importé.</p>}</div></div>
+    <div className="table-card mt-6">{loading ? <p className="p-4 text-slate-600">Chargement…</p> : <DataTable columns={bookColumns} data={books} emptyMessage="Aucun ouvrage au catalogue." rowKey={(book) => String(book.id)} />}</div>
   </section>
 }
 

@@ -38,6 +38,9 @@ export const catalogCirculationService = {
   getDocuments() {
     return api.get<CatalogDocument[]>('/catalog-circulation/documents')
   },
+  getPublicDocuments() {
+    return api.get<CatalogDocument[]>('/public/catalogs')
+  },
   getLoans() {
     return api.get<CatalogDocumentLoan[]>('/catalog-circulation/loans')
   },

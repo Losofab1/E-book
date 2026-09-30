@@ -31,8 +31,13 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      // Ne redirige que les sessions expirées : la consultation publique
+      // anonyme ne doit jamais renvoyer vers /login.
+      const hadToken = localStorage.getItem('jwt_token') !== null
       localStorage.removeItem('jwt_token')
-      window.location.href = '/login'
+      if (hadToken) {
+        window.location.href = '/login'
+      }
     }
 
     return Promise.reject(error)

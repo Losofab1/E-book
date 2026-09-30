@@ -24,7 +24,7 @@ function App() {
         <Router>
           <NavBar />
 
-          <main className="pt-36">
+          <main className="pt-24">
             <Routes>
 <Route path="/" element={<Home />} />   
               <Route path="/login" element={<Login />} />

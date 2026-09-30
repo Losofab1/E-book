@@ -55,6 +55,7 @@ public class SecurityConfig {
                         // Allow all CORS preflight requests (OPTIONS) without authentication
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**", "/error", "/actuator/health/**", "/actuator/info").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/public/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/digital/books/*/access").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/books/**").hasAnyRole("ADMIN", "BIBLIOTHECAIRE", "ADHERENT", "ETUDIANT", "PROFESSEUR")
                         .requestMatchers("/api/books/**").hasAnyRole("ADMIN", "BIBLIOTHECAIRE")

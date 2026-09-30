@@ -6,6 +6,10 @@ export const bookService = {
     return api.get<Book[]>('/books')
   },
 
+  getPublic() {
+    return api.get<Book[]>('/public/books')
+  },
+
   getById(id: string) {
     return api.get<Book>(`/books/${id}`)
   },

@@ -28,23 +28,23 @@ const DataTable = <T,>({
 
   return (
     <div className={`overflow-x-auto ${className}`}>
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
+      <table className="min-w-full divide-y divide-slate-200">
+        <thead className="bg-slate-100">
           <tr>
             {columns.map((column) => (
               <th
                 key={column.key}
-                className={`px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500 ${column.headerClassName ?? ''}`}
+                className={`px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-slate-700 ${column.headerClassName ?? ''}`}
               >
                 {column.label}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-200 bg-white">
+        <tbody className="divide-y divide-slate-200 bg-white">
           {data.length === 0 ? (
             <tr>
-              <td colSpan={columns.length} className="px-6 py-8 text-center text-gray-500">
+              <td colSpan={columns.length} className="px-6 py-8 text-center text-slate-600">
                 {emptyMessage}
               </td>
             </tr>
@@ -62,7 +62,7 @@ const DataTable = <T,>({
         </tbody>
       </table>
       {data.length > 10 && (
-        <div className="flex justify-center border-t border-gray-200 bg-white px-6 py-4">
+        <div className="flex justify-center border-t border-slate-200 bg-white px-6 py-4">
           <button
             type="button"
             onClick={() => setShowAll((current) => !current)}
