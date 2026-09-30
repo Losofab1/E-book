@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BookOpenText, CalendarClock, RotateCcw, Search, UserRound } from 'lucide-react'
+import { BookOpenText, CalendarClock, Check, RotateCcw, Search, UserRound } from 'lucide-react'
 import { api } from '../services/api'
 import { bookService } from '../services/bookService'
 import { catalogCirculationService, type CatalogDocument, type CatalogDocumentLoan } from '../services/catalogCirculationService'
@@ -24,6 +24,8 @@ const Loans = () => {
   const [users, setUsers] = useState<User[]>([])
   const [selectedBookUser, setSelectedBookUser] = useState('')
   const [selectedDocumentUser, setSelectedDocumentUser] = useState('')
+  const [selectedBook, setSelectedBook] = useState('')
+  const [selectedDocument, setSelectedDocument] = useState('')
   const [search, setSearch] = useState('')
   const [message, setMessage] = useState('')
   const [catalogError, setCatalogError] = useState('')
@@ -108,16 +110,20 @@ const Loans = () => {
   const filteredBooks = availableBooks.filter(book =>
     [book.title, book.author, book.category].some(value => value?.toLocaleLowerCase('fr').includes(searchTerm))
   )
-  const createBookLoan = async (bookId: number) => {
-    if (!selectedBookUser) {
-      setMessage('Sélectionnez d’abord un usager pour prêter cet ouvrage.')
+  const selectedBookDetails = books.find(book => String(book.id) === selectedBook)
+  const selectedDocumentDetails = documents.find(document => String(document.id) === selectedDocument)
+
+  const createBookLoan = async () => {
+    if (!selectedBookUser || !selectedBook) {
+      setMessage('Sélectionnez un usager et un ouvrage pour créer l’emprunt.')
       return
     }
     setSubmitting(true)
     setMessage('')
     try {
-      await loanService.create({ userId: Number(selectedBookUser), bookId })
+      await loanService.create({ userId: Number(selectedBookUser), bookId: Number(selectedBook) })
       setMessage('Prêt de l’ouvrage enregistré.')
+      setSelectedBook('')
       setSearch('')
       setRefreshKey(key => key + 1)
     } catch (error: any) {
@@ -141,30 +147,34 @@ const Loans = () => {
     { key: 'copies', label: 'Ex.', render: (book) => <span className="font-medium text-primary-800">{book.availableCopies} ex.</span> },
     {
       key: 'action',
-      label: 'Prêt',
-      render: (book) => (
-        <button
-          type="button"
-          onClick={() => void createBookLoan(book.id)}
-          disabled={submitting}
-          className="btn-primary px-3 py-1.5 text-sm"
-        >
-          {submitting ? 'Enregistrement…' : 'Prêter'}
-        </button>
-      ),
+      label: 'Sélection',
+      render: (book) => {
+        const selected = selectedBook === String(book.id)
+        return (
+          <button
+            type="button"
+            aria-pressed={selected}
+            onClick={() => setSelectedBook(selected ? '' : String(book.id))}
+            className={selected ? 'btn-primary px-3 py-1.5 text-sm' : 'btn-outline px-3 py-1.5 text-sm'}
+          >
+            {selected ? 'Sélectionné' : 'Sélectionner'}
+          </button>
+        )
+      },
     },
   ]
 
-  const createDocumentLoan = async (catalogDocumentId: number) => {
-    if (!selectedDocumentUser) {
-      setMessage('Sélectionnez d’abord un usager pour prêter ce catalogue.')
+  const createDocumentLoan = async () => {
+    if (!selectedDocumentUser || !selectedDocument) {
+      setMessage('Sélectionnez un usager et un catalogue pour créer l’emprunt.')
       return
     }
     setSubmitting(true)
     setMessage('')
     try {
-      await catalogCirculationService.createLoan({ userId: Number(selectedDocumentUser), catalogDocumentId })
+      await catalogCirculationService.createLoan({ userId: Number(selectedDocumentUser), catalogDocumentId: Number(selectedDocument) })
       setMessage('Emprunt du document enregistré.')
+      setSelectedDocument('')
       setRefreshKey(key => key + 1)
     } catch (error: any) {
       setMessage(error.response?.data?.message ?? 'Création du prêt de document impossible.')
@@ -197,18 +207,22 @@ const Loans = () => {
     },
     {
       key: 'action',
-      label: 'Prêt',
-      render: (document) => (
-        <button
-          type="button"
-          onClick={() => void createDocumentLoan(document.id)}
-          disabled={!document.available || submitting}
-          title={document.available ? 'Prêter ce catalogue' : 'Catalogue actuellement emprunté'}
-          className="btn-primary px-3 py-1.5 text-sm"
-        >
-          {submitting ? 'Enregistrement…' : 'Prêter'}
-        </button>
-      ),
+      label: 'Sélection',
+      render: (document) => {
+        const selected = selectedDocument === String(document.id)
+        return (
+          <button
+            type="button"
+            aria-pressed={selected}
+            disabled={!document.available}
+            title={document.available ? 'Sélectionner ce catalogue' : 'Catalogue actuellement emprunté'}
+            onClick={() => setSelectedDocument(selected ? '' : String(document.id))}
+            className={selected ? 'btn-primary px-3 py-1.5 text-sm' : 'btn-outline px-3 py-1.5 text-sm'}
+          >
+            {selected ? 'Sélectionné' : 'Sélectionner'}
+          </button>
+        )
+      },
     },
   ]
 
@@ -320,7 +334,12 @@ const Loans = () => {
             </div>
           </div>
 
-          <p className="mt-4 text-sm text-slate-600">Prêt direct : choisissez l’usager, puis cliquez sur <strong>Prêter</strong> dans le tableau (10 ouvrages par page, <strong>Voir plus</strong> pour la suite).</p>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+            <p className="text-sm text-slate-600">{selectedBookDetails ? `Ouvrage choisi : ${selectedBookDetails.title}` : 'Aucun ouvrage sélectionné'}</p>
+            <button type="button" onClick={() => void createBookLoan()} disabled={!selectedBookUser || !selectedBook || submitting || loadingCatalog || loadingUsers} className="btn-primary">
+              <Check size={18} />{submitting ? 'Enregistrement…' : 'Créer l’emprunt'}
+            </button>
+          </div>
         </section>
       )}
 
@@ -359,7 +378,12 @@ const Loans = () => {
               </div>
             </div>
           </div>
-          <p className="mt-4 text-sm text-slate-600">Prêt direct : choisissez l’usager, puis cliquez sur <strong>Prêter</strong> dans le tableau (10 catalogues par page, <strong>Voir plus</strong> pour la suite).</p>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+            <p className="text-sm text-slate-600">{selectedDocumentDetails ? `Catalogue choisi : ${selectedDocumentDetails.name}` : 'Aucun catalogue sélectionné'}</p>
+            <button type="button" onClick={() => void createDocumentLoan()} disabled={!selectedDocumentUser || !selectedDocument || submitting || loadingDocuments || loadingUsers} className="btn-primary">
+              <Check size={18} />{submitting ? 'Enregistrement…' : 'Créer l’emprunt'}
+            </button>
+          </div>
         </section>
       )}
 
@@ -386,7 +410,9 @@ const Loans = () => {
                     : item.status === 'RETURNED'
                       ? <StatusBadge label="Rendu" variant="success" />
                       : <StatusBadge label={item.status} variant="neutral" />}</td>
-                  <td className="p-3"><div className="flex flex-wrap gap-3">{item.status === 'BORROWED' && <>{staff && <button type="button" onClick={() => void extendLoan(item)} className="inline-flex items-center gap-1 text-sm font-medium text-blue-800 hover:underline"><CalendarClock size={16} />Prolonger</button>}<button type="button" onClick={() => void returnLoan(item.id)} className="inline-flex items-center gap-1 text-sm font-medium text-green-800 hover:underline"><RotateCcw size={16} />Retour</button></>}</div></td>
+                  <td className="p-3"><div className="flex flex-wrap gap-3">{item.status === 'BORROWED' && <>{staff && <button type="button" onClick={() => void extendLoan(item)} className="inline-flex items-center gap-1 text-sm font-medium text-blue-800 hover:underline"><CalendarClock size={16} />Prolonger</button>}{staff
+                    ? <button type="button" onClick={() => void returnLoan(item.id)} className="inline-flex items-center gap-1 text-sm font-medium text-green-800 hover:underline"><RotateCcw size={16} />Retour</button>
+                    : <button type="button" onClick={() => void returnLoan(item.id)} className="inline-flex items-center gap-1 text-sm font-medium text-red-700 hover:underline"><RotateCcw size={16} />Annuler</button>}</>}</div></td>
                 </tr>
               ))}
               {!loadingLoans && !loansError && items.length === 0 && <tr><td colSpan={staff ? 5 : 4} className="p-8 text-center text-slate-600">Aucun prêt à afficher.</td></tr>}
@@ -414,7 +440,9 @@ const Loans = () => {
                   ? <StatusBadge label="En cours" variant="warning" />
                   : <StatusBadge label="Rendu" variant="success" />}</td>
                 {staff && <td className="p-3">{item.status === 'BORROWED' && <button type="button" onClick={() => void downloadDocument(item.catalogDocumentId, item.catalogDocumentName)} className="font-medium text-green-800 hover:underline">Télécharger</button>}</td>}
-                <td className="p-3"><div className="flex flex-wrap gap-3">{item.status === 'BORROWED' && <>{staff && <button type="button" onClick={() => void extendDocumentLoan(item)} className="text-sm font-medium text-blue-800 hover:underline">Prolonger</button>}<button type="button" onClick={() => void returnDocumentLoan(item.id)} className="text-sm font-medium text-green-800 hover:underline">Retour</button></>}</div></td>
+                <td className="p-3"><div className="flex flex-wrap gap-3">{item.status === 'BORROWED' && <>{staff && <button type="button" onClick={() => void extendDocumentLoan(item)} className="text-sm font-medium text-blue-800 hover:underline">Prolonger</button>}{staff
+                  ? <button type="button" onClick={() => void returnDocumentLoan(item.id)} className="text-sm font-medium text-green-800 hover:underline">Retour</button>
+                  : <button type="button" onClick={() => void returnDocumentLoan(item.id)} className="text-sm font-medium text-red-700 hover:underline">Annuler</button>}</>}</div></td>
               </tr>)}
               {!loadingDocumentLoans && !documentLoansError && documentLoans.length === 0 && <tr><td colSpan={staff ? 6 : 4} className="p-8 text-center text-slate-600">Aucun prêt de catalogue numérique.</td></tr>}
               {loadingDocumentLoans && <tr><td colSpan={staff ? 6 : 4} className="p-8 text-center text-slate-600">Chargement des prêts numériques…</td></tr>}
