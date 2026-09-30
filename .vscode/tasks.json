@@ -1,36 +1,80 @@
 {
-  "version": "2.0.0",
-  "tasks": [
-    {
-      "label": "Backend : démarrer automatiquement",
-      "type": "shell",
-      "command": ".\\mvnw.cmd",
-      "args": ["spring-boot:run"],
-      "options": {
-        "cwd": "${workspaceFolder}\\PROJET_JAVA\\Biblioth"
-      },
-      "isBackground": true,
-      "runOptions": {
-        "runOn": "folderOpen"
-      },
-      "problemMatcher": {
-        "owner": "spring-boot",
-        "pattern": {
-          "regexp": "^(.*)$",
-          "file": 1,
-          "message": 1
-        },
-        "background": {
-          "activeOnStart": true,
-          "beginsPattern": ".*Starting.*",
-          "endsPattern": ".*Started .*"
-        }
-      },
-      "presentation": {
-        "reveal": "silent",
-        "panel": "dedicated",
-        "group": "serveurs"
-      }
-    }
-  ]
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Backend : démarrer automatiquement",
+			"type": "shell",
+			"command": ".\\mvnw.cmd",
+			"args": [
+				"spring-boot:run"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}\\PROJET_JAVA\\Biblioth"
+			},
+			"isBackground": true,
+			"runOptions": {
+				"runOn": "folderOpen"
+			},
+			"problemMatcher": {
+				"owner": "spring-boot",
+				"pattern": {
+					"regexp": "^(.*)$",
+					"file": 1,
+					"message": 1
+				},
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": ".*Starting.*",
+					"endsPattern": ".*Started .*"
+				}
+			},
+			"presentation": {
+				"reveal": "silent",
+				"panel": "dedicated",
+				"group": "serveurs"
+			}
+		},
+		{
+			"label": "Run targeted Auth tests",
+			"type": "shell",
+			"command": "cmd /d /c \"cd /d \\\"D:\\Mes projets\\DebutReact\\PROJET_JAVA\\Biblioth\\\" && .\\mvnw.cmd -q -Dtest=AuthIntegrationTest test\"",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Check path with task",
+			"type": "shell",
+			"command": "Set-Location 'D:\\Mes projets\\DebutReact\\PROJET_JAVA\\Biblioth'; Get-Location",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Run AuthIntegrationTest",
+			"type": "shell",
+			"command": "Set-Location 'D:\\Mes projets\\DebutReact\\PROJET_JAVA\\Biblioth'; .\\mvnw.cmd -q -Dtest=AuthIntegrationTest test",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Run AuthIntegrationTest",
+			"type": "shell",
+			"command": "Set-Location 'D:\\Mes projets\\DebutReact\\PROJET_JAVA\\Biblioth'; .\\mvnw.cmd -q -Dtest=AuthIntegrationTest test",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Run AuthIntegrationTest",
+			"type": "shell",
+			"command": "Set-Location 'D:\\Mes projets\\DebutReact\\PROJET_JAVA\\Biblioth'; .\\mvnw.cmd -q -Dtest=AuthIntegrationTest test",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Verify Auth tests status",
+			"type": "shell",
+			"command": "Set-Location 'D:\\Mes projets\\DebutReact\\PROJET_JAVA\\Biblioth'; .\\mvnw.cmd -q -Dtest=AuthIntegrationTest test; Write-Host \"EXIT:$LASTEXITCODE\"",
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
 }
