@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BookOpenText, CalendarClock, Layers } from 'lucide-react'
+import { BookOpenText, CalendarClock, Layers, Plus } from 'lucide-react'
 import { api } from '../services/api'
+import { useAuth } from '../AuthContext'
 import { bookService } from '../services/bookService'
 import { loanService } from '../services/loanService'
 import { reservationService } from '../services/reservationService'
@@ -28,6 +29,7 @@ interface DashboardStats {
 const asArray = (value: unknown): Record<string, unknown>[] => (Array.isArray(value) ? (value as Record<string, unknown>[]) : [])
 
 const Dashboard = () => {
+  const { user } = useAuth()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -108,6 +110,17 @@ const Dashboard = () => {
       />
       {error && <Alert variant="error">{error}</Alert>}
       {loading && <p className="mt-6 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement des indicateurs…</p>}
+      {!loading && !error && (
+        <div className="card mt-6">
+          <h2 className="text-xl font-bold">Actions rapides</h2>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link to="/loans" className="btn-primary"><Plus size={18} />Nouveau prêt</Link>
+            <Link to="/reservations" className="btn-outline">Gérer les réservations</Link>
+            <Link to="/catalog" className="btn-outline">Gérer le catalogue</Link>
+            {user?.role === 'admin' && <Link to="/users" className="btn-outline">Gérer les usagers</Link>}
+          </div>
+        </div>
+      )}
       {!loading && !error && stats && (
         <>
           <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

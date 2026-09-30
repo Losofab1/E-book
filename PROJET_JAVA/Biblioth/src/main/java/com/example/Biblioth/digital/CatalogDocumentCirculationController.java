@@ -42,7 +42,9 @@ public class CatalogDocumentCirculationController {
     @PostMapping("/loans")
     public ResponseEntity<CatalogDocumentLoanResponse> createLoan(
             @Valid @RequestBody CatalogDocumentLoanRequest request, Authentication authentication) {
-        requireStaff(authentication);
+        if (!isStaff(authentication) && !circulationService.getUserId(authentication.getName()).equals(request.userId())) {
+            throw new AccessDeniedException("Vous ne pouvez créer un emprunt que pour votre propre compte.");
+        }
         return ResponseEntity.ok(circulationService.createLoan(request));
     }
 

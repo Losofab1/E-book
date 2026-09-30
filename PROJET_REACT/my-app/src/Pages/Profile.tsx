@@ -124,22 +124,17 @@ const Profile = () => {
         </div>
         <div className="card">
           <h2 className="text-xl font-bold">Accès rapide</h2>
-          <ul className="mt-4 space-y-3 text-sm">
+          <div className="mt-4 grid gap-2">
             {(user.role === 'admin' || user.role === 'bibliothecaire') && (
-              <li><Link to="/dashboard" className="font-semibold text-primary-800 hover:underline">Tableau de bord</Link></li>
+              <Link to="/dashboard" className="btn-outline justify-start">Tableau de bord</Link>
             )}
             {user.role === 'admin' && (
-              <li><Link to="/users" className="font-semibold text-primary-800 hover:underline">Gestion des usagers</Link></li>
+              <Link to="/users" className="btn-outline justify-start">Gestion des usagers</Link>
             )}
-            <li>
-              <Link to="/loans" className="font-semibold text-primary-800 hover:underline">{staff ? 'Gestion des prêts' : 'Mes emprunts'}</Link>
-            </li>
-            <li>
-              <Link to="/reservations" className="font-semibold text-primary-800 hover:underline">{staff ? 'Gestion des réservations' : 'Mes réservations'}</Link></li>
-            <li>
-              <Link to="/catalog" className="font-semibold text-primary-800 hover:underline">Catalogue</Link>
-            </li>
-          </ul>
+            <Link to="/loans" className="btn-outline justify-start">{staff ? 'Gestion des prêts' : 'Mes emprunts'}</Link>
+            <Link to="/reservations" className="btn-outline justify-start">{staff ? 'Gestion des réservations' : 'Mes réservations'}</Link>
+            <Link to="/catalog" className="btn-outline justify-start">Catalogue</Link>
+          </div>
         </div>
       </div>
 

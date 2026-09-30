@@ -226,6 +226,45 @@ const Loans = () => {
     },
   ]
 
+  const createOwnBookLoan = async () => {
+    if (!user || !selectedBook) {
+      setMessage('Sélectionnez un ouvrage pour créer votre emprunt.')
+      return
+    }
+    setSubmitting(true)
+    setMessage('')
+    try {
+      await loanService.create({ userId: user.id, bookId: Number(selectedBook) })
+      setMessage('Demande d’emprunt enregistrée.')
+      setSelectedBook('')
+      setSearch('')
+      setRefreshKey(key => key + 1)
+    } catch (error: any) {
+      setMessage(error.response?.data?.message ?? 'Création impossible.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const createOwnDocumentLoan = async () => {
+    if (!user || !selectedDocument) {
+      setMessage('Sélectionnez un catalogue pour créer votre emprunt.')
+      return
+    }
+    setSubmitting(true)
+    setMessage('')
+    try {
+      await catalogCirculationService.createLoan({ userId: user.id, catalogDocumentId: Number(selectedDocument) })
+      setMessage('Demande d’emprunt enregistrée.')
+      setSelectedDocument('')
+      setRefreshKey(key => key + 1)
+    } catch (error: any) {
+      setMessage(error.response?.data?.message ?? 'Création du prêt de document impossible.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const returnLoan = async (id: number) => {
     try {
       await loanService.returnLoan(String(id))
@@ -390,6 +429,58 @@ const Loans = () => {
       {catalogError && !staff && <Alert variant="error">{catalogError}</Alert>}
       {loansError && <Alert variant="error">{loansError}</Alert>}
       {message && <Alert>{message}</Alert>}
+
+      {!staff && (
+        <section className="mt-7 border-y border-slate-200 py-6" aria-labelledby="request-book-loan">
+          <h2 id="request-book-loan" className="text-xl font-bold">Demander un emprunt — ouvrages</h2>
+          <p className="mt-1 text-sm text-slate-600">Sélectionnez un ouvrage disponible, puis créez votre demande. Annulable ensuite depuis vos prêts.</p>
+          <div className="mt-4">
+            {loadingCatalog && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement du catalogue…</p>}
+            {!loadingCatalog && !catalogError && (
+              <div className="table-card">
+                <DataTable
+                  columns={bookStockColumns}
+                  data={filteredBooks}
+                  emptyMessage={availableBooks.length === 0 ? 'Aucun ouvrage disponible pour un emprunt.' : 'Aucun ouvrage ne correspond à cette recherche.'}
+                  rowKey={(book) => String(book.id)}
+                />
+              </div>
+            )}
+          </div>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+            <p className="text-sm text-slate-600">{selectedBookDetails ? `Ouvrage choisi : ${selectedBookDetails.title}` : 'Aucun ouvrage sélectionné'}</p>
+            <button type="button" onClick={() => void createOwnBookLoan()} disabled={!selectedBook || submitting || loadingCatalog} className="btn-primary">
+              <Check size={18} />{submitting ? 'Enregistrement…' : 'Créer l’emprunt'}
+            </button>
+          </div>
+        </section>
+      )}
+
+      {!staff && (
+        <section className="mt-7 border-b border-slate-200 pb-6" aria-labelledby="request-document-loan">
+          <h2 id="request-document-loan" className="text-xl font-bold">Demander un emprunt — catalogues</h2>
+          <p className="mt-1 text-sm text-slate-600">Sélectionnez un catalogue disponible, puis créez votre demande. Annulable ensuite depuis vos prêts.</p>
+          <div className="mt-4">
+            {loadingDocuments && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement des catalogues…</p>}
+            {!loadingDocuments && !documentsError && (
+              <div className="table-card">
+                <DataTable
+                  columns={documentStockColumns}
+                  data={documents}
+                  emptyMessage="Aucun catalogue numérique importé."
+                  rowKey={(document) => String(document.id)}
+                />
+              </div>
+            )}
+          </div>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+            <p className="text-sm text-slate-600">{selectedDocumentDetails ? `Catalogue choisi : ${selectedDocumentDetails.name}` : 'Aucun catalogue sélectionné'}</p>
+            <button type="button" onClick={() => void createOwnDocumentLoan()} disabled={!selectedDocument || submitting || loadingDocuments} className="btn-primary">
+              <Check size={18} />{submitting ? 'Enregistrement…' : 'Créer l’emprunt'}
+            </button>
+          </div>
+        </section>
+      )}
 
       <section className="mt-7" aria-labelledby="loan-list-title">
         <div className="mb-3 flex items-center justify-between gap-4">

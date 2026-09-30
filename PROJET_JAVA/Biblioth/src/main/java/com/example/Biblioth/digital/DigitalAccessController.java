@@ -38,7 +38,9 @@ public class DigitalAccessController {
 
     @PostMapping("/loans")
     public ResponseEntity<LoanResponse> createLoan(@Valid @RequestBody LoanRequest request, Authentication authentication) {
-        requireStaff(authentication);
+        if (!isStaff(authentication) && !digitalAccessService.getUserIdForEmail(authentication.getName()).equals(request.getUserId())) {
+            throw new AccessDeniedException("Vous ne pouvez créer un emprunt que pour votre propre compte.");
+        }
         return ResponseEntity.ok(digitalAccessService.createLoan(request));
     }
 
