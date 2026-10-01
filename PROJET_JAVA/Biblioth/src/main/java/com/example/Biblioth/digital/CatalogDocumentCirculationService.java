@@ -65,7 +65,9 @@ public class CatalogDocumentCirculationService {
         return documents.stream().map(document -> {
             long borrowedCount = borrowedByDoc.getOrDefault(document.getId(), 0L);
             int total = totalCopies(document.getTotalCopies());
-            int availableCopies = (int) Math.max(0, total - borrowedCount);
+            int availableCopies = document.getAvailableCopies() == null
+                    ? (int) Math.max(0, total - borrowedCount)
+                    : Math.max(0, Math.min(total, document.getAvailableCopies()));
             long waitingReservations = waitingByDoc.getOrDefault(document.getId(), 0L);
             LocalDateTime readyDeadline = readyDeadlineByDoc.get(document.getId());
             boolean available = availableCopies > 0 && waitingReservations == 0 && readyDeadline == null;
@@ -88,9 +90,11 @@ public class CatalogDocumentCirculationService {
     @Transactional
     public CatalogDocumentLoanResponse createLoan(CatalogDocumentLoanRequest request) {
         CatalogDocument document = findDocumentForUpdate(request.catalogDocumentId());
+        int total = totalCopies(document);
+        int available = availableCopies(document);
         long borrowedCount = loanRepository.countByCatalogDocumentIdAndStatus(document.getId(), PhysicalLoanStatus.BORROWED);
-        if (borrowedCount >= totalCopies(document)) {
-            throw new IllegalArgumentException("Aucun exemplaire disponible pour ce catalogue.");
+        if (available < 1 || borrowedCount >= total) {
+            throw new IllegalArgumentException(stockExhaustedMessage(total, borrowedCount));
         }
         if (reservationRepository.countByCatalogDocumentIdAndStatus(document.getId(), ReservationStatus.WAITING) > 0
                 || reservationRepository.existsByCatalogDocumentIdAndStatusAndPickupDeadlineAfter(
@@ -105,6 +109,8 @@ public class CatalogDocumentCirculationService {
         loan.setStatus(PhysicalLoanStatus.BORROWED);
         loan.setBorrowedAt(now);
         loan.setDueAt(request.dueAt() == null ? now.plusDays(DEFAULT_LOAN_DAYS) : request.dueAt());
+        document.setAvailableCopies(available - 1);
+        documentRepository.save(document);
         CatalogDocumentLoan saved = loanRepository.save(loan);
         notificationService.create(user.getEmail(), "catalog_loan_created",
                 "Votre emprunt du catalogue « " + document.getFileName() + " » est enregistré.");
@@ -131,6 +137,7 @@ public class CatalogDocumentCirculationService {
         }
         loan.setStatus(PhysicalLoanStatus.RETURNED);
         loan.setReturnedAt(LocalDateTime.now());
+        incrementStock(loan.getCatalogDocument().getId());
         CatalogDocumentLoan saved = loanRepository.save(loan);
         notificationService.create(loan.getUser().getEmail(), "catalog_loan_returned",
                 "Le retour du catalogue « " + loan.getCatalogDocument().getFileName() + " » est enregistré.");
@@ -146,6 +153,7 @@ public class CatalogDocumentCirculationService {
         }
         loan.setStatus(PhysicalLoanStatus.CANCELED);
         loan.setReturnedAt(LocalDateTime.now());
+        incrementStock(loan.getCatalogDocument().getId());
         CatalogDocumentLoan saved = loanRepository.save(loan);
         notificationService.create(loan.getUser().getEmail(), "catalog_loan_canceled",
                 "L'annulation du prêt du catalogue « " + loan.getCatalogDocument().getFileName() + " » est enregistrée.");
@@ -153,8 +161,26 @@ public class CatalogDocumentCirculationService {
     }
 
     @Transactional
-    public List<CatalogDocumentReservationResponse> getReservations(Long userId) {
-        expireReadyReservations();
+    public void deleteDocument(Long documentId) {
+        CatalogDocument document = findDocumentForUpdate(documentId);
+        if (loanRepository.existsByCatalogDocumentIdAndStatus(document.getId(), PhysicalLoanStatus.BORROWED)) {
+            throw new IllegalArgumentException(
+                    "Suppression impossible : des exemplaires sont encore empruntés. Attendez leur retour.");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        if (reservationRepository.existsByCatalogDocumentIdAndStatus(document.getId(), ReservationStatus.WAITING)
+                || reservationRepository.existsByCatalogDocumentIdAndStatusAndPickupDeadlineAfter(
+                        document.getId(), ReservationStatus.READY_FOR_PICKUP, now)) {
+            throw new IllegalArgumentException(
+                    "Suppression impossible : des réservations actives existent pour ce catalogue.");
+        }
+        loanRepository.deleteByCatalogDocumentId(document.getId());
+        reservationRepository.deleteByCatalogDocumentId(document.getId());
+        documentRepository.delete(document);
+    }
+
+    @Transactional
+    public List<CatalogDocumentReservationResponse> getReservations(Long userId) {        expireReadyReservations();
         List<CatalogDocumentReservation> reservations = userId == null
             ? reservationRepository.findAllByOrderByReservedAtAsc()
                 : reservationRepository.findByUserIdOrderByReservedAtDesc(userId);
@@ -170,8 +196,9 @@ public class CatalogDocumentCirculationService {
                 user.getId(), document.getId(), ACTIVE_RESERVATION_STATUSES)) {
             throw new IllegalArgumentException("Vous avez déjà une réservation active pour ce catalogue.");
         }
-        boolean full = loanRepository.countByCatalogDocumentIdAndStatus(
-            document.getId(), PhysicalLoanStatus.BORROWED) >= totalCopies(document);
+        boolean full = availableCopies(document) < 1
+                || loanRepository.countByCatalogDocumentIdAndStatus(
+                    document.getId(), PhysicalLoanStatus.BORROWED) >= totalCopies(document);
         boolean alreadyReserved = reservationRepository.countByCatalogDocumentIdAndStatus(
             document.getId(), ReservationStatus.WAITING) > 0
             || reservationRepository.existsByCatalogDocumentIdAndStatusAndPickupDeadlineAfter(
@@ -206,9 +233,10 @@ public class CatalogDocumentCirculationService {
             throw new IllegalArgumentException("Une réservation antérieure doit être traitée en premier.");
         }
         CatalogDocument lockedDocument = findDocumentForUpdate(reservation.getCatalogDocument().getId());
-        if (loanRepository.countByCatalogDocumentIdAndStatus(
-                lockedDocument.getId(), PhysicalLoanStatus.BORROWED) >= totalCopies(lockedDocument)) {
-            throw new IllegalArgumentException("Aucun exemplaire disponible pour ce catalogue.");
+        long borrowedCount = loanRepository.countByCatalogDocumentIdAndStatus(
+                lockedDocument.getId(), PhysicalLoanStatus.BORROWED);
+        if (availableCopies(lockedDocument) < 1 || borrowedCount >= totalCopies(lockedDocument)) {
+            throw new IllegalArgumentException(stockExhaustedMessage(totalCopies(lockedDocument), borrowedCount));
         }
         LocalDateTime now = LocalDateTime.now();
         if (reservationRepository.existsByCatalogDocumentIdAndStatusAndPickupDeadlineAfter(
@@ -252,8 +280,9 @@ public class CatalogDocumentCirculationService {
             throw new IllegalArgumentException("Cette réservation a expiré.");
         }
         CatalogDocument document = findDocumentForUpdate(reservation.getCatalogDocument().getId());
-        if (loanRepository.countByCatalogDocumentIdAndStatus(document.getId(), PhysicalLoanStatus.BORROWED) >= totalCopies(document)) {
-            throw new IllegalArgumentException("Aucun exemplaire disponible pour ce catalogue.");
+        long borrowedCount = loanRepository.countByCatalogDocumentIdAndStatus(document.getId(), PhysicalLoanStatus.BORROWED);
+        if (availableCopies(document) < 1 || borrowedCount >= totalCopies(document)) {
+            throw new IllegalArgumentException(stockExhaustedMessage(totalCopies(document), borrowedCount));
         }
         UserEntity user = reservation.getUser();
         CatalogDocumentLoan loan = new CatalogDocumentLoan();
@@ -262,6 +291,8 @@ public class CatalogDocumentCirculationService {
         loan.setStatus(PhysicalLoanStatus.BORROWED);
         loan.setBorrowedAt(now);
         loan.setDueAt(now.plusDays(DEFAULT_LOAN_DAYS));
+        document.setAvailableCopies(availableCopies(document) - 1);
+        documentRepository.save(document);
         CatalogDocumentLoan saved = loanRepository.save(loan);
 
         reservation.setStatus(ReservationStatus.PICKED_UP);
@@ -340,6 +371,31 @@ public class CatalogDocumentCirculationService {
 
     private int totalCopies(Integer total) {
         return total == null || total < 1 ? 10 : total;
+    }
+
+    private int availableCopies(CatalogDocument document) {
+        if (document == null) {
+            return 0;
+        }
+        if (document.getAvailableCopies() == null) {
+            long borrowed = loanRepository.countByCatalogDocumentIdAndStatus(
+                    document.getId(), PhysicalLoanStatus.BORROWED);
+            return (int) Math.max(0, totalCopies(document) - borrowed);
+        }
+        return Math.max(0, Math.min(totalCopies(document), document.getAvailableCopies()));
+    }
+
+    private void incrementStock(Long documentId) {
+        CatalogDocument document = findDocumentForUpdate(documentId);
+        int total = totalCopies(document);
+        int available = availableCopies(document);
+        document.setAvailableCopies(Math.min(total, available + 1));
+        documentRepository.save(document);
+    }
+
+    private String stockExhaustedMessage(int total, long borrowedCount) {
+        return "Limite atteinte (" + borrowedCount + "/" + total
+                + " exemplaire(s) emprunté(s)). Attendez le retour d'au moins un exemplaire avant un nouvel emprunt.";
     }
 
     private UserEntity findUser(Long userId) {

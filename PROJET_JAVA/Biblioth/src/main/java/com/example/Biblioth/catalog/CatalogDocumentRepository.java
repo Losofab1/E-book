@@ -14,7 +14,8 @@ public interface CatalogDocumentRepository extends JpaRepository<CatalogDocument
 	 * Listage sans la colonne {@code content} : évite de charger N x 25 Mo en mémoire.
 	 */
 	@Query("select document.id as id, document.fileName as fileName, document.contentType as contentType, "
-			+ "document.uploadedAt as uploadedAt, document.totalCopies as totalCopies "
+			+ "document.uploadedAt as uploadedAt, document.totalCopies as totalCopies, "
+			+ "document.availableCopies as availableCopies "
 			+ "from CatalogDocument document order by document.id desc")
 	java.util.List<CatalogDocumentMetadata> findAllMetadata();
 

@@ -23,7 +23,12 @@ const ReaderModal = ({ title, badgeLabel, badgeVariant, notice, actions, childre
       if (event.key === 'Escape' && !document.fullscreenElement) onClose()
     }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = previousOverflow
+    }
   }, [onClose])
 
   useEffect(() => {
@@ -46,7 +51,7 @@ const ReaderModal = ({ title, badgeLabel, badgeVariant, notice, actions, childre
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/60 sm:items-center sm:p-4"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -54,12 +59,12 @@ const ReaderModal = ({ title, badgeLabel, badgeVariant, notice, actions, childre
     >
       <div
         ref={panelRef}
-        className={`flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden bg-white shadow-2xl ${isFullscreen ? 'h-screen max-h-none w-screen max-w-none rounded-none' : 'rounded-2xl'}`}
+        className={`flex h-[100dvh] max-h-[100dvh] w-full flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[90vh] sm:max-w-4xl ${isFullscreen ? 'sm:h-screen sm:max-h-none sm:w-screen sm:max-w-none sm:rounded-none' : 'sm:rounded-2xl'}`}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-5">
-          <div className="flex min-w-0 flex-wrap items-center gap-3">
-            <h2 className="truncate text-xl font-bold">{title}</h2>
+        <div className="flex items-center justify-between gap-2 border-b border-slate-200 p-3 sm:gap-3 sm:p-5">
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+            <h2 className="min-w-0 flex-1 truncate text-base font-bold sm:text-xl">{title}</h2>
             <StatusBadge label={badgeLabel} variant={badgeVariant} />
           </div>
           <div className="flex shrink-0 items-center gap-1">
@@ -68,23 +73,23 @@ const ReaderModal = ({ title, badgeLabel, badgeVariant, notice, actions, childre
               onClick={() => void toggleFullscreen()}
               aria-label={isFullscreen ? 'Quitter le plein écran' : 'Agrandir en plein écran'}
               title={isFullscreen ? 'Quitter le plein écran' : 'Agrandir en plein écran'}
-              className="rounded-xl p-2 text-slate-600 hover:bg-slate-100"
+              className="min-h-[44px] min-w-[44px] rounded-xl p-2 text-slate-600 hover:bg-slate-100"
             >
-              {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
+              {isFullscreen ? <Minimize size={22} /> : <Maximize size={22} />}
             </button>
             <button
               type="button"
               onClick={onClose}
               aria-label="Fermer le lecteur"
-              className="rounded-xl p-2 text-slate-600 hover:bg-slate-100"
+              className="min-h-[44px] min-w-[44px] rounded-xl p-2 text-slate-600 hover:bg-slate-100"
             >
-              <X size={20} />
+              <X size={22} />
             </button>
           </div>
         </div>
-        {notice && <p className="border-b border-slate-200 bg-primary-50 px-5 py-3 text-sm text-primary-900">{notice}</p>}
-        <div className="min-h-0 flex-1 overflow-auto p-5">{children}</div>
-        {actions && <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 p-5">{actions}</div>}
+        {notice && <p className="border-b border-slate-200 bg-primary-50 px-3 py-2.5 text-[13px] leading-relaxed text-primary-900 sm:px-5 sm:py-3 sm:text-sm">{notice}</p>}
+        <div className="min-h-0 flex-1 overflow-auto overscroll-contain p-3 sm:p-5">{children}</div>
+        {actions && <div className="flex flex-col-reverse gap-2 border-t border-slate-200 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-3 sm:p-5">{actions}</div>}
       </div>
     </div>
   )

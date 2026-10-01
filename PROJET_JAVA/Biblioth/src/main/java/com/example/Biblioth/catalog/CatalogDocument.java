@@ -38,6 +38,9 @@ public class CatalogDocument {
     @Column(name = "total_copies", nullable = false)
     private Integer totalCopies = 10;
 
+    @Column(name = "available_copies", nullable = false)
+    private Integer availableCopies = 10;
+
     public Long getId() {
         return id;
     }
@@ -88,5 +91,13 @@ public class CatalogDocument {
 
     public void setTotalCopies(Integer value) {
         totalCopies = value;
+    }
+
+    public Integer getAvailableCopies() {
+        return availableCopies;
+    }
+
+    public void setAvailableCopies(Integer value) {
+        availableCopies = value;
     }
 }

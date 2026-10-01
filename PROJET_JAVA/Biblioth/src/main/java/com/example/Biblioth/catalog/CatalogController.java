@@ -27,11 +27,14 @@ public class CatalogController {
     public List<Map<String, Object>> list() {
         return repository.findAllMetadata().stream().map(document -> {
             java.util.Map<String, Object> view = new java.util.LinkedHashMap<>();
+            int total = document.getTotalCopies() == null || document.getTotalCopies() < 1 ? 10 : document.getTotalCopies();
+            int available = document.getAvailableCopies() == null ? total : Math.max(0, Math.min(total, document.getAvailableCopies()));
             view.put("id", document.getId());
             view.put("name", document.getFileName());
             view.put("type", document.getContentType());
             view.put("uploadedAt", document.getUploadedAt());
-            view.put("totalCopies", document.getTotalCopies() == null ? 10 : document.getTotalCopies());
+            view.put("totalCopies", total);
+            view.put("availableCopies", available);
             return view;
         }).toList();
     }
@@ -87,6 +90,7 @@ public class CatalogController {
             document.setContent(file.getBytes()); document.setUploadedAt(LocalDateTime.now());
             document.setUploadedBy(authentication == null ? "system" : authentication.getName());
             document.setTotalCopies(10);
+            document.setAvailableCopies(10);
             return repository.save(document);
         } catch (java.io.IOException exception) {
             throw new IllegalArgumentException("Impossible de lire le fichier importé.", exception);
@@ -106,5 +110,15 @@ public class CatalogController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + document.getFileName().replace("\"", "") + "\"")
                 .header(HttpHeaders.CACHE_CONTROL, "private, max-age=300")
                 .body(content);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id, Authentication authentication) {
+        if (authentication == null || authentication.getAuthorities().stream()
+                .noneMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN"))) {
+            throw new AccessDeniedException("Seul l'administrateur peut supprimer un catalogue.");
+        }
+        circulationService.deleteDocument(id);
+        return ResponseEntity.noContent().build();
     }
 }

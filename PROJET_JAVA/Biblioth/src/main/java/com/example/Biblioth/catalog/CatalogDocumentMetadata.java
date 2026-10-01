@@ -12,4 +12,5 @@ public interface CatalogDocumentMetadata {
     String getContentType();
     LocalDateTime getUploadedAt();
     Integer getTotalCopies();
+    Integer getAvailableCopies();
 }

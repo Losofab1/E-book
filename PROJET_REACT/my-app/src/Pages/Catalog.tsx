@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react'
-import { Download, Upload } from 'lucide-react'
+import { Download, Trash2, Upload } from 'lucide-react'
 import { bookService } from '../services/bookService'
 import { catalogCirculationService, clearCatalogCache } from '../services/catalogCirculationService'
 import { api } from '../services/api'
@@ -11,7 +11,7 @@ import StatusBadge from '../Components/ui/StatusBadge'
 
 type Book = { id: number; title: string; author: string; isbn: string; category: string; availableCopies: number }
 
-type CatalogFile = { id: number; name: string; type: string; uploadedAt?: string; totalCopies?: number }
+type CatalogFile = { id: number; name: string; type: string; uploadedAt?: string; totalCopies?: number; availableCopies?: number }
 
 const bookColumns: TableColumn<Book>[] = [
   { key: 'title', label: 'Titre', render: (book) => <span className="font-semibold">{book.title}</span> },
@@ -35,6 +35,7 @@ const Catalog = () => {
   const [bookPage, setBookPage] = useState(0)
   const PAGE_SIZE = 20
   const canImport = user?.role === 'admin' || user?.role === 'bibliothecaire'
+  const isAdmin = user?.role === 'admin'
   const MAX_SIZE = 25 * 1024 * 1024
   const loading = loadingBooks || loadingDocs
 
@@ -47,7 +48,7 @@ const Catalog = () => {
         ? <StatusBadge label="PDF" variant="info" />
         : <StatusBadge label="CSV" variant="neutral" />),
     },
-    { key: 'copies', label: 'Ex.', render: (document) => <span className="font-medium text-primary-800">{document.totalCopies ?? 10} ex.</span> },
+    { key: 'copies', label: 'Ex.', render: (document) => <span className="font-medium text-primary-800">{document.availableCopies ?? document.totalCopies ?? 10}/{document.totalCopies ?? 10} ex.</span> },
     {
       key: 'uploadedAt',
       label: 'Importé le',
@@ -59,13 +60,25 @@ const Catalog = () => {
       key: 'actions',
       label: 'Action',
       render: (document) => (
-        <button
-          type="button"
-          onClick={() => void download({ id: document.id, name: document.name })}
-          className="inline-flex items-center gap-1 text-sm font-medium text-primary-800 hover:underline"
-        >
-          <Download size={16} />Télécharger
-        </button>
+        <span className="inline-flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void download({ id: document.id, name: document.name })}
+            className="inline-flex items-center gap-1 text-sm font-medium text-primary-800 hover:underline"
+          >
+            <Download size={16} />Télécharger
+          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => void remove(document)}
+              className="inline-flex items-center gap-1 text-sm font-medium text-red-700 hover:underline"
+              title="Supprimer ce catalogue (admin)"
+            >
+              <Trash2 size={16} />Supprimer
+            </button>
+          )}
+        </span>
       ),
     },
   ]
@@ -155,6 +168,21 @@ const Catalog = () => {
       setMessage(status === 403
         ? 'Téléchargement réservé : empruntez ce catalogue ou attendez une réservation disponible.'
         : (error?.response?.data?.message ?? 'Téléchargement impossible.'))
+    }
+  }, [])
+
+  const remove = useCallback(async (document: { id: number; name: string }) => {
+    if (!window.confirm(`Supprimer le catalogue « ${document.name} » ?`)) return
+    try {
+      await api.delete(`/catalogs/${document.id}`)
+      clearCatalogCache()
+      setDocuments((prev) => prev.filter((d) => d.id !== document.id))
+      setMessage(`Catalogue « ${document.name} » supprimé.`)
+    } catch (error: any) {
+      const status = error?.response?.status as number | undefined
+      setMessage(status === 403
+        ? 'Suppression réservée à l’administrateur.'
+        : (error?.response?.data?.message ?? 'Suppression impossible.'))
     }
   }, [])
 

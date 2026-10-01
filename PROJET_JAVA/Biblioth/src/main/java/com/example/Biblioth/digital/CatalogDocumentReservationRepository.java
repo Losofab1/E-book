@@ -11,6 +11,8 @@ import org.springframework.data.repository.query.Param;
 
 public interface CatalogDocumentReservationRepository extends JpaRepository<CatalogDocumentReservation, Long> {
     boolean existsByUserIdAndCatalogDocumentIdAndStatusIn(Long userId, Long catalogDocumentId, Collection<ReservationStatus> statuses);
+    boolean existsByCatalogDocumentIdAndStatus(Long catalogDocumentId, ReservationStatus status);
+    void deleteByCatalogDocumentId(Long catalogDocumentId);
     long countByCatalogDocumentIdAndStatus(Long catalogDocumentId, ReservationStatus status);
     boolean existsByCatalogDocumentIdAndUserEmailAndStatusAndPickupDeadlineAfter(
             Long catalogDocumentId, String userEmail, ReservationStatus status, LocalDateTime now);

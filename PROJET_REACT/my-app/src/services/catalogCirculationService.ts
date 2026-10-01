@@ -88,13 +88,16 @@ export const catalogCirculationService = {
     return api.get<CatalogDocumentLoan[]>('/catalog-circulation/loans')
   },
   createLoan(payload: { userId: number; catalogDocumentId: number }) {
-    return api.post<CatalogDocumentLoan>('/catalog-circulation/loans', payload)
+    clearCatalogCache()
+    return api.post<CatalogDocumentLoan>('/catalog-circulation/loans', payload).finally(() => clearCatalogCache())
   },
   returnLoan(id: number) {
-    return api.patch<CatalogDocumentLoan>(`/catalog-circulation/loans/${id}/return`)
+    clearCatalogCache()
+    return api.patch<CatalogDocumentLoan>(`/catalog-circulation/loans/${id}/return`).finally(() => clearCatalogCache())
   },
   cancelLoan(id: number) {
-    return api.patch<CatalogDocumentLoan>(`/catalog-circulation/loans/${id}/cancel`)
+    clearCatalogCache()
+    return api.patch<CatalogDocumentLoan>(`/catalog-circulation/loans/${id}/cancel`).finally(() => clearCatalogCache())
   },
   extendLoan(id: number, dueAt: string) {
     return api.patch<CatalogDocumentLoan>(`/catalog-circulation/loans/${id}/extend`, { dueAt })
@@ -112,7 +115,8 @@ export const catalogCirculationService = {
     return api.patch<CatalogDocumentReservation>(`/catalog-circulation/reservations/${id}/ready`)
   },
   pickupReservation(id: number) {
-    return api.patch<CatalogDocumentLoan>(`/catalog-circulation/reservations/${id}/pickup`)
+    clearCatalogCache()
+    return api.patch<CatalogDocumentLoan>(`/catalog-circulation/reservations/${id}/pickup`).finally(() => clearCatalogCache())
   },
   async download(id: number, fileName: string) {
     const blob = await catalogCirculationService.fetchFullBlob(id)

@@ -413,7 +413,7 @@ const Loans = () => {
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <h2 id="digital-loan-title" className="text-xl font-bold">Prêter un catalogue PDF/CSV</h2>
-              <p className="mt-1 text-sm text-slate-600">Un document numérique ne peut être prêté qu’à une personne à la fois.</p>
+              <p className="mt-1 text-sm text-slate-600">10 exemplaires par catalogue : à stock épuisé, attendez au moins un retour avant un nouvel emprunt.</p>
             </div>
             <span className="text-sm text-slate-600">{documents.filter(document => document.available).length} disponible(s)</span>
           </div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BookOpenText, FileText, Search } from 'lucide-react'
 import { bookService } from '../services/bookService'
@@ -9,6 +9,9 @@ import { useAuth } from '../AuthContext'
 import Alert from './ui/Alert'
 import StatusBadge from './ui/StatusBadge'
 import ReaderModal from './ui/ReaderModal'
+import CatalogCsvReader from './ui/CatalogCsvReader'
+
+const CatalogPdfReader = lazy(() => import('./ui/CatalogPdfReader'))
 
 type Book = { id: number; title: string; author: string; category: string; availableCopies: number }
 
@@ -165,31 +168,32 @@ const Consul = () => {
   }
 
   return (
-    <section className="mx-auto max-w-7xl px-4 py-10 text-slate-900 sm:px-6 lg:px-8">
-      <div className="rounded-2xl bg-primary-700 px-6 py-8 text-white shadow-lg sm:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-6">
+    <section className="mx-auto max-w-7xl px-3 py-6 text-slate-900 sm:px-6 sm:py-10 lg:px-8">
+      <div className="rounded-2xl bg-primary-700 px-4 py-6 text-white shadow-lg sm:px-8 sm:py-8">
+        <div className="flex flex-col gap-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-6">
           <div className="flex items-center gap-3">
-            <BookOpenText size={34} strokeWidth={1.5} />
-            <div>
-              <h1 className="text-3xl font-bold">Consulter le catalogue</h1>
-              <p className="mt-1 text-green-50">Ouvrages et catalogues numériques, en accès libre.</p>
+            <BookOpenText size={30} strokeWidth={1.5} className="shrink-0 sm:hidden" />
+            <BookOpenText size={34} strokeWidth={1.5} className="hidden shrink-0 sm:block" />
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold leading-tight sm:text-3xl">Consulter le catalogue</h1>
+              <p className="mt-1 text-sm text-green-50 sm:text-base">Ouvrages et catalogues numériques, en accès libre.</p>
             </div>
           </div>
           <div className="flex gap-3">
-            <div className="rounded-xl bg-white/15 px-5 py-3 text-center" aria-label={`${books.length} ouvrage(s) au catalogue`}>
-              <p className="text-3xl font-bold">{loading ? '...' : books.length}</p>
-              <p className="text-sm text-green-50">ouvrages</p>
+            <div className="flex-1 rounded-xl bg-white/15 px-4 py-2.5 text-center sm:flex-none sm:px-5 sm:py-3" aria-label={`${books.length} ouvrage(s) au catalogue`}>
+              <p className="text-2xl font-bold sm:text-3xl">{loading ? '...' : books.length}</p>
+              <p className="text-xs text-green-50 sm:text-sm">ouvrages</p>
             </div>
-            <div className="rounded-xl bg-white/15 px-5 py-3 text-center" aria-label={`${documents.length} catalogue(s) numérique(s)`}>
-              <p className="text-3xl font-bold">{loading ? '...' : documents.length}</p>
-              <p className="text-sm text-green-50">catalogues</p>
+            <div className="flex-1 rounded-xl bg-white/15 px-4 py-2.5 text-center sm:flex-none sm:px-5 sm:py-3" aria-label={`${documents.length} catalogue(s) numérique(s)`}>
+              <p className="text-2xl font-bold sm:text-3xl">{loading ? '...' : documents.length}</p>
+              <p className="text-xs text-green-50 sm:text-sm">catalogues</p>
             </div>
           </div>
         </div>
       </div>
 
       <div className="card mt-6">
-        <div className="relative">
+          <div className="relative">
           <Search size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
             type="search"
@@ -197,7 +201,7 @@ const Consul = () => {
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Rechercher un titre, un auteur, une catégorie, un catalogue…"
             aria-label="Rechercher dans le catalogue"
-            className="input pl-10"
+            className="input pl-10 text-[16px]"
           />
         </div>
       </div>
@@ -251,12 +255,12 @@ const Consul = () => {
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md">
               <ul className="divide-y divide-slate-200">
                 {pagedDocuments.map((document) => (
-                  <li key={document.id} className="flex flex-wrap items-center justify-between gap-4 p-5">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <FileText className="shrink-0 text-primary-700" size={26} strokeWidth={1.5} />
+                  <li key={document.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4 sm:p-5">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <FileText className="mt-0.5 shrink-0 text-primary-700" size={26} strokeWidth={1.5} />
                       <div className="min-w-0">
-                        <p className="truncate font-semibold">{document.name}</p>
-                        <p className="mt-1 text-sm text-slate-600">
+                        <p className="break-words font-semibold leading-snug">{document.name}</p>
+                        <p className="mt-1 text-[13px] leading-relaxed text-slate-600 sm:text-sm">
                           {(document.contentType ?? '').toLowerCase().includes('pdf') ? 'PDF' : 'CSV'}
                           {` · ${document.totalCopies ?? 10} ex. · ${document.availableCopies ?? (document.available ? document.totalCopies ?? 10 : 0)} disponible(s)`}
                           {!document.available && document.dueAt ? ` · Retour le ${new Date(document.dueAt).toLocaleDateString('fr-FR')}` : ''}
@@ -264,16 +268,16 @@ const Consul = () => {
                         </p>
                       </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:gap-3">
                       {document.available
                         ? <StatusBadge label="Disponible" variant="success" />
                         : <StatusBadge label="Emprunté" variant="warning" />}
-                      <button type="button" onClick={() => void openCatalogReader(document)} className="btn-outline px-3 py-1.5 text-sm">Lire</button>
+                      <button type="button" onClick={() => void openCatalogReader(document)} className="btn-outline min-h-[44px] flex-1 px-4 py-2 text-sm sm:flex-none">Lire</button>
                       {user
-                        ? <Link to={document.available ? '/loans' : '/reservations'} className="text-sm font-semibold text-primary-800 hover:underline">
+                        ? <Link to={document.available ? '/loans' : '/reservations'} className="min-h-[44px] py-2 text-sm font-semibold text-primary-800 hover:underline">
                             {document.available ? 'Emprunter' : 'Réserver'}
                           </Link>
-                        : <Link to="/login" className="text-sm font-semibold text-primary-800 hover:underline">Se connecter pour emprunter</Link>}
+                        : <Link to="/login" className="min-h-[44px] py-2 text-sm font-semibold text-primary-800 hover:underline">Se connecter pour emprunter</Link>}
                     </div>
                   </li>
                 ))}
@@ -301,8 +305,8 @@ const Consul = () => {
             : undefined}
           onClose={closeReader}
           actions={user
-            ? <Link to="/reservations" className="btn-primary">Réserver cet ouvrage</Link>
-            : <Link to="/login" className="btn-primary">Se connecter</Link>}
+            ? <Link to="/reservations" className="btn-primary min-h-[44px] w-full text-sm sm:w-auto">Réserver cet ouvrage</Link>
+            : <Link to="/login" className="btn-primary min-h-[44px] w-full text-sm sm:w-auto">Se connecter</Link>}
         >
           {reader.loading && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement…</p>}
           {!reader.loading && reader.error && <Alert variant="error">{reader.error}</Alert>}
@@ -330,15 +334,15 @@ const Consul = () => {
           onClose={closeReader}
           actions={<>
             {!reader.loading && !reader.fullAccess && (user
-              ? <Link to={reader.document.available ? '/loans' : '/reservations'} className="btn-primary">
+              ? <Link to={reader.document.available ? '/loans' : '/reservations'} className="btn-primary min-h-[44px] w-full text-sm sm:w-auto">
                   {reader.document.available ? 'Emprunter' : 'Réserver'}
                 </Link>
-              : <Link to="/login" className="btn-primary">Se connecter</Link>)}
+              : <Link to="/login" className="btn-primary min-h-[44px] w-full text-sm sm:w-auto">Se connecter</Link>)}
             {!reader.loading && reader.fullUrl && staff && (
-              <a href={reader.fullUrl} download={reader.document.name} className="btn-outline">Télécharger</a>
+              <a href={reader.fullUrl} download={reader.document.name} className="btn-outline min-h-[44px] w-full text-sm sm:w-auto">Télécharger</a>
             )}
             {!reader.loading && reader.fullTextUrl && staff && (
-              <a href={reader.fullTextUrl} download={reader.document.name} className="btn-outline">
+              <a href={reader.fullTextUrl} download={reader.document.name} className="btn-outline min-h-[44px] w-full text-sm sm:w-auto">
                 Télécharger
               </a>
             )}
@@ -347,16 +351,12 @@ const Consul = () => {
           {reader.loading && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement…</p>}
           {!reader.loading && reader.error && <Alert variant="error">{reader.error}</Alert>}
           {!reader.loading && !reader.error && reader.isPdf && (
-            <iframe
-              title={`Aperçu de ${reader.document.name}`}
-              src={reader.fullUrl ?? reader.previewUrl ?? ''}
-              className="h-[70vh] w-full rounded-xl border border-slate-200 bg-slate-50"
-            />
+            <Suspense fallback={<p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement du lecteur PDF…</p>}>
+              <CatalogPdfReader url={reader.fullUrl ?? reader.previewUrl ?? ''} title={reader.document.name} />
+            </Suspense>
           )}
           {!reader.loading && !reader.error && !reader.isPdf && (
-            <pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-              {reader.fullText ?? reader.previewText ?? ''}
-            </pre>
+            <CatalogCsvReader text={reader.fullText ?? reader.previewText ?? ''} title={reader.document.name} />
           )}
         </ReaderModal>
       )}
