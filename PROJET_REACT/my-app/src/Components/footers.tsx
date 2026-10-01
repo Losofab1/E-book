@@ -26,7 +26,7 @@ const Footers = () => {
               </li>
               <li className="flex items-center gap-2">
                 <Mail size={16} />
-                <a href="mailto:contact@losofab.bj" className="hover:text-white transition">contact@losofab.bj</a>
+                <a href="mailto:fabricelodjou014@gmail.com" className="hover:text-white transition">fabricelodjou014@gmail.com</a>
               </li>
               <li className="flex items-center gap-2">
                 <Phone size={16} />
