@@ -7,6 +7,9 @@ export type CatalogDocument = {
   available: boolean
   dueAt: string | null
   waitingReservations: number
+  totalCopies: number
+  availableCopies: number
+  borrowedCount: number
 }
 
 export type CatalogDocumentLoan = {

@@ -223,6 +223,7 @@ const Consul = () => {
                         <p className="truncate font-semibold">{document.name}</p>
                         <p className="mt-1 text-sm text-slate-600">
                           {document.contentType.includes('pdf') ? 'PDF' : 'CSV'}
+                          {` · ${document.totalCopies ?? 10} ex. · ${document.availableCopies ?? (document.available ? document.totalCopies ?? 10 : 0)} disponible(s)`}
                           {!document.available && document.dueAt ? ` · Retour le ${new Date(document.dueAt).toLocaleDateString('fr-FR')}` : ''}
                           {` · ${document.waitingReservations} réservation(s) en attente`}
                         </p>

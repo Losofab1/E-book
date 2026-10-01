@@ -8,5 +8,8 @@ public record CatalogDocumentCirculationResponse(
         String contentType,
         boolean available,
         LocalDateTime dueAt,
-        long waitingReservations
+        long waitingReservations,
+        int totalCopies,
+        int availableCopies,
+        long borrowedCount
 ) {}

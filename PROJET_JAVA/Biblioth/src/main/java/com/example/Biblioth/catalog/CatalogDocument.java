@@ -32,6 +32,9 @@ public class CatalogDocument {
     @Column(nullable = false)
     private String uploadedBy;
 
+    @Column(name = "total_copies", nullable = false)
+    private Integer totalCopies = 10;
+
     public Long getId() {
         return id;
     }
@@ -74,5 +77,13 @@ public class CatalogDocument {
 
     public void setUploadedBy(String value) {
         uploadedBy = value;
+    }
+
+    public Integer getTotalCopies() {
+        return totalCopies;
+    }
+
+    public void setTotalCopies(Integer value) {
+        totalCopies = value;
     }
 }

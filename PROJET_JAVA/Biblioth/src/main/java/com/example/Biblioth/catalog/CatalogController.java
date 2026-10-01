@@ -25,7 +25,15 @@ public class CatalogController {
 
     @GetMapping
     public List<Map<String, Object>> list() {
-        return repository.findAll().stream().map(document -> Map.<String, Object>of("id", document.getId(), "name", document.getFileName(), "type", document.getContentType(), "uploadedAt", document.getUploadedAt())).toList();
+        return repository.findAll().stream().map(document -> {
+            java.util.Map<String, Object> view = new java.util.LinkedHashMap<>();
+            view.put("id", document.getId());
+            view.put("name", document.getFileName());
+            view.put("type", document.getContentType());
+            view.put("uploadedAt", document.getUploadedAt());
+            view.put("totalCopies", document.getTotalCopies() == null ? 10 : document.getTotalCopies());
+            return view;
+        }).toList();
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -74,6 +82,7 @@ public class CatalogController {
         CatalogDocument document = new CatalogDocument();
         document.setFileName(name); document.setContentType(lower.endsWith(".pdf") ? MediaType.APPLICATION_PDF_VALUE : "text/csv");
         document.setContent(file.getBytes()); document.setUploadedAt(LocalDateTime.now()); document.setUploadedBy(authentication.getName());
+        document.setTotalCopies(10);
         return repository.save(document);
     }
 

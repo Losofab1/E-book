@@ -49,6 +49,10 @@ public class CatalogDocumentCirculationService {
     public List<CatalogDocumentCirculationResponse> getDocuments() {
         expireReadyReservations();
         return documentRepository.findAll().stream().map(document -> {
+            long borrowedCount = loanRepository.countByCatalogDocumentIdAndStatus(
+                    document.getId(), PhysicalLoanStatus.BORROWED);
+            int total = totalCopies(document);
+            int availableCopies = (int) Math.max(0, total - borrowedCount);
             CatalogDocumentLoan activeLoan = loanRepository.findFirstByCatalogDocumentIdAndStatusOrderByDueAtDesc(
                     document.getId(), PhysicalLoanStatus.BORROWED).orElse(null);
             long waitingReservations = reservationRepository.countByCatalogDocumentIdAndStatus(
@@ -56,9 +60,11 @@ public class CatalogDocumentCirculationService {
             LocalDateTime now = LocalDateTime.now();
                 CatalogDocumentReservation readyReservation = reservationRepository.findFirstByCatalogDocumentIdAndStatusAndPickupDeadlineAfter(
                     document.getId(), ReservationStatus.READY_FOR_PICKUP, now).orElse(null);
+            boolean available = availableCopies > 0 && waitingReservations == 0 && readyReservation == null;
             return new CatalogDocumentCirculationResponse(document.getId(), document.getFileName(),
-                    document.getContentType(), activeLoan == null && waitingReservations == 0 && readyReservation == null,
-                    activeLoan != null ? activeLoan.getDueAt() : readyReservation == null ? null : readyReservation.getPickupDeadline(), waitingReservations);
+                    document.getContentType(), available,
+                    activeLoan != null ? activeLoan.getDueAt() : readyReservation == null ? null : readyReservation.getPickupDeadline(), waitingReservations,
+                    total, availableCopies, borrowedCount);
         }).toList();
     }
 
@@ -73,8 +79,9 @@ public class CatalogDocumentCirculationService {
     @Transactional
     public CatalogDocumentLoanResponse createLoan(CatalogDocumentLoanRequest request) {
         CatalogDocument document = findDocumentForUpdate(request.catalogDocumentId());
-        if (loanRepository.existsByCatalogDocumentIdAndStatus(document.getId(), PhysicalLoanStatus.BORROWED)) {
-            throw new IllegalArgumentException("Ce catalogue est déjà emprunté.");
+        long borrowedCount = loanRepository.countByCatalogDocumentIdAndStatus(document.getId(), PhysicalLoanStatus.BORROWED);
+        if (borrowedCount >= totalCopies(document)) {
+            throw new IllegalArgumentException("Aucun exemplaire disponible pour ce catalogue.");
         }
         if (reservationRepository.countByCatalogDocumentIdAndStatus(document.getId(), ReservationStatus.WAITING) > 0
                 || reservationRepository.existsByCatalogDocumentIdAndStatusAndPickupDeadlineAfter(
@@ -154,13 +161,13 @@ public class CatalogDocumentCirculationService {
                 user.getId(), document.getId(), ACTIVE_RESERVATION_STATUSES)) {
             throw new IllegalArgumentException("Vous avez déjà une réservation active pour ce catalogue.");
         }
-        boolean alreadyBorrowed = loanRepository.existsByCatalogDocumentIdAndStatus(
-            document.getId(), PhysicalLoanStatus.BORROWED);
+        boolean full = loanRepository.countByCatalogDocumentIdAndStatus(
+            document.getId(), PhysicalLoanStatus.BORROWED) >= totalCopies(document);
         boolean alreadyReserved = reservationRepository.countByCatalogDocumentIdAndStatus(
             document.getId(), ReservationStatus.WAITING) > 0
             || reservationRepository.existsByCatalogDocumentIdAndStatusAndPickupDeadlineAfter(
                 document.getId(), ReservationStatus.READY_FOR_PICKUP, LocalDateTime.now());
-        if (!alreadyBorrowed && !alreadyReserved) {
+        if (!full && !alreadyReserved) {
             throw new IllegalArgumentException("Ce catalogue est disponible ; créez un prêt plutôt qu'une réservation.");
         }
         CatalogDocumentReservation reservation = new CatalogDocumentReservation();
@@ -182,7 +189,6 @@ public class CatalogDocumentCirculationService {
         if (reservation.getStatus() != ReservationStatus.WAITING) {
             throw new IllegalArgumentException("Seule une réservation en attente peut être rendue disponible.");
         }
-        findDocumentForUpdate(reservation.getCatalogDocument().getId());
         CatalogDocumentReservation nextInQueue = reservationRepository
             .findFirstByCatalogDocumentIdAndStatusOrderByReservedAtAsc(
                 reservation.getCatalogDocument().getId(), ReservationStatus.WAITING)
@@ -190,9 +196,10 @@ public class CatalogDocumentCirculationService {
         if (!nextInQueue.getId().equals(reservationId)) {
             throw new IllegalArgumentException("Une réservation antérieure doit être traitée en premier.");
         }
-        if (loanRepository.existsByCatalogDocumentIdAndStatus(
-                reservation.getCatalogDocument().getId(), PhysicalLoanStatus.BORROWED)) {
-            throw new IllegalArgumentException("Ce catalogue est encore emprunté.");
+        CatalogDocument lockedDocument = findDocumentForUpdate(reservation.getCatalogDocument().getId());
+        if (loanRepository.countByCatalogDocumentIdAndStatus(
+                lockedDocument.getId(), PhysicalLoanStatus.BORROWED) >= totalCopies(lockedDocument)) {
+            throw new IllegalArgumentException("Aucun exemplaire disponible pour ce catalogue.");
         }
         LocalDateTime now = LocalDateTime.now();
         if (reservationRepository.existsByCatalogDocumentIdAndStatusAndPickupDeadlineAfter(
@@ -236,8 +243,8 @@ public class CatalogDocumentCirculationService {
             throw new IllegalArgumentException("Cette réservation a expiré.");
         }
         CatalogDocument document = findDocumentForUpdate(reservation.getCatalogDocument().getId());
-        if (loanRepository.existsByCatalogDocumentIdAndStatus(document.getId(), PhysicalLoanStatus.BORROWED)) {
-            throw new IllegalArgumentException("Ce catalogue est encore emprunté.");
+        if (loanRepository.countByCatalogDocumentIdAndStatus(document.getId(), PhysicalLoanStatus.BORROWED) >= totalCopies(document)) {
+            throw new IllegalArgumentException("Aucun exemplaire disponible pour ce catalogue.");
         }
         UserEntity user = reservation.getUser();
         CatalogDocumentLoan loan = new CatalogDocumentLoan();
@@ -299,6 +306,11 @@ public class CatalogDocumentCirculationService {
     private CatalogDocument findDocumentForUpdate(Long documentId) {
         return documentRepository.findByIdForUpdate(documentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Catalogue introuvable."));
+    }
+
+    private int totalCopies(CatalogDocument document) {
+        Integer total = document.getTotalCopies();
+        return total == null || total < 1 ? 10 : total;
     }
 
     private UserEntity findUser(Long userId) {

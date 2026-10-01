@@ -192,11 +192,17 @@ const Loans = () => {
           <span className="block font-semibold">{document.name}</span>
           <span className="mt-1 block text-sm text-slate-600">
             {document.contentType.includes('pdf') ? 'PDF' : 'CSV'}
+            {` · ${document.totalCopies ?? 10} ex. · ${document.availableCopies ?? (document.available ? 10 : 0)} disponible(s)`}
             {!document.available && document.dueAt ? ` · Retour le ${new Date(document.dueAt).toLocaleDateString('fr-FR')}` : ''}
             {` · ${document.waitingReservations} réservation(s) en attente`}
           </span>
         </span>
       ),
+    },
+    {
+      key: 'copies',
+      label: 'Ex.',
+      render: (document) => <span className="font-medium text-primary-800">{document.availableCopies ?? (document.available ? document.totalCopies ?? 10 : 0)}/{document.totalCopies ?? 10}</span>,
     },
     {
       key: 'status',

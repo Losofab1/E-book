@@ -11,7 +11,7 @@ import StatusBadge from '../Components/ui/StatusBadge'
 
 type Book = { id: number; title: string; author: string; isbn: string; category: string; availableCopies: number }
 
-type CatalogFile = { id: number; name: string; type: string; uploadedAt?: string }
+type CatalogFile = { id: number; name: string; type: string; uploadedAt?: string; totalCopies?: number }
 
 const bookColumns: TableColumn<Book>[] = [
   { key: 'title', label: 'Titre', render: (book) => <span className="font-semibold">{book.title}</span> },
@@ -40,6 +40,7 @@ const Catalog = () => {
         ? <StatusBadge label="PDF" variant="info" />
         : <StatusBadge label="CSV" variant="neutral" />),
     },
+    { key: 'copies', label: 'Ex.', render: (document) => <span className="font-medium text-primary-800">{document.totalCopies ?? 10} ex.</span> },
     {
       key: 'uploadedAt',
       label: 'Importé le',
