@@ -21,13 +21,4 @@ public interface CatalogDocumentRepository extends JpaRepository<CatalogDocument
 
 	@Query("select document.content from CatalogDocument document where document.id = :id")
 	Optional<byte[]> findContentById(@Param("id") Long id);
-
-	/**
-	 * Aperçu + métadonnées sans la colonne {@code content} :
-	 * la lecture démarre sans charger jusqu'à 25 Mo.
-	 */
-	@Query("select document.previewContent as previewContent, document.previewContentType as previewContentType, "
-			+ "document.contentType as contentType, document.fileName as fileName "
-			+ "from CatalogDocument document where document.id = :id")
-	Optional<CatalogDocumentPreview> findPreviewById(@Param("id") Long id);
 }
