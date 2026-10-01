@@ -48,22 +48,31 @@ public class CatalogDocumentCirculationService {
         @Transactional
     public List<CatalogDocumentCirculationResponse> getDocuments() {
         expireReadyReservations();
-        return documentRepository.findAll().stream().map(document -> {
-            long borrowedCount = loanRepository.countByCatalogDocumentIdAndStatus(
-                    document.getId(), PhysicalLoanStatus.BORROWED);
-            int total = totalCopies(document);
+        LocalDateTime now = LocalDateTime.now();
+        java.util.List<com.example.Biblioth.catalog.CatalogDocumentMetadata> documents =
+                documentRepository.findAllMetadata();
+        if (documents.isEmpty()) {
+            return List.of();
+        }
+        java.util.Map<Long, Long> borrowedByDoc = toCountMap(
+                loanRepository.countBorrowedGrouped(PhysicalLoanStatus.BORROWED));
+        java.util.Map<Long, LocalDateTime> dueAtByDoc = toDateMap(
+                loanRepository.maxDueAtGrouped(PhysicalLoanStatus.BORROWED));
+        java.util.Map<Long, Long> waitingByDoc = toCountMap(
+                reservationRepository.countByStatusGrouped(ReservationStatus.WAITING));
+        java.util.Map<Long, LocalDateTime> readyDeadlineByDoc = toDateMap(
+                reservationRepository.maxReadyDeadlineGrouped(ReservationStatus.READY_FOR_PICKUP, now));
+        return documents.stream().map(document -> {
+            long borrowedCount = borrowedByDoc.getOrDefault(document.getId(), 0L);
+            int total = totalCopies(document.getTotalCopies());
             int availableCopies = (int) Math.max(0, total - borrowedCount);
-            CatalogDocumentLoan activeLoan = loanRepository.findFirstByCatalogDocumentIdAndStatusOrderByDueAtDesc(
-                    document.getId(), PhysicalLoanStatus.BORROWED).orElse(null);
-            long waitingReservations = reservationRepository.countByCatalogDocumentIdAndStatus(
-                    document.getId(), ReservationStatus.WAITING);
-            LocalDateTime now = LocalDateTime.now();
-                CatalogDocumentReservation readyReservation = reservationRepository.findFirstByCatalogDocumentIdAndStatusAndPickupDeadlineAfter(
-                    document.getId(), ReservationStatus.READY_FOR_PICKUP, now).orElse(null);
-            boolean available = availableCopies > 0 && waitingReservations == 0 && readyReservation == null;
+            long waitingReservations = waitingByDoc.getOrDefault(document.getId(), 0L);
+            LocalDateTime readyDeadline = readyDeadlineByDoc.get(document.getId());
+            boolean available = availableCopies > 0 && waitingReservations == 0 && readyDeadline == null;
+            LocalDateTime dueAt = dueAtByDoc.get(document.getId());
             return new CatalogDocumentCirculationResponse(document.getId(), document.getFileName(),
                     document.getContentType(), available,
-                    activeLoan != null ? activeLoan.getDueAt() : readyReservation == null ? null : readyReservation.getPickupDeadline(), waitingReservations,
+                    dueAt != null ? dueAt : readyDeadline, waitingReservations,
                     total, availableCopies, borrowedCount);
         }).toList();
     }
@@ -295,12 +304,29 @@ public class CatalogDocumentCirculationService {
     }
 
     private void expireReadyReservations() {
-        LocalDateTime now = LocalDateTime.now();
-        reservationRepository.findByStatusAndPickupDeadlineBefore(ReservationStatus.READY_FOR_PICKUP, now)
-                .forEach(reservation -> {
-                    reservation.setStatus(ReservationStatus.EXPIRED);
-                    reservationRepository.save(reservation);
-                });
+        reservationRepository.expireReadyBulk(
+                ReservationStatus.EXPIRED, ReservationStatus.READY_FOR_PICKUP, LocalDateTime.now());
+    }
+
+    private static java.util.Map<Long, Long> toCountMap(List<Object[]> rows) {
+        java.util.Map<Long, Long> result = new java.util.HashMap<>();
+        for (Object[] row : rows) {
+            if (row != null && row.length >= 2 && row[0] instanceof Number id) {
+                long count = row[1] instanceof Number number ? number.longValue() : 0L;
+                result.put(id.longValue(), count);
+            }
+        }
+        return result;
+    }
+
+    private static java.util.Map<Long, LocalDateTime> toDateMap(List<Object[]> rows) {
+        java.util.Map<Long, LocalDateTime> result = new java.util.HashMap<>();
+        for (Object[] row : rows) {
+            if (row != null && row.length >= 2 && row[0] instanceof Number id && row[1] instanceof LocalDateTime date) {
+                result.put(id.longValue(), date);
+            }
+        }
+        return result;
     }
 
     private CatalogDocument findDocumentForUpdate(Long documentId) {
@@ -309,7 +335,10 @@ public class CatalogDocumentCirculationService {
     }
 
     private int totalCopies(CatalogDocument document) {
-        Integer total = document.getTotalCopies();
+        return totalCopies(document == null ? null : document.getTotalCopies());
+    }
+
+    private int totalCopies(Integer total) {
         return total == null || total < 1 ? 10 : total;
     }
 

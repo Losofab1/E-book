@@ -25,7 +25,7 @@ public class CatalogController {
 
     @GetMapping
     public List<Map<String, Object>> list() {
-        return repository.findAll().stream().map(document -> {
+        return repository.findAllMetadata().stream().map(document -> {
             java.util.Map<String, Object> view = new java.util.LinkedHashMap<>();
             view.put("id", document.getId());
             view.put("name", document.getFileName());
@@ -99,6 +99,12 @@ public class CatalogController {
         if (!circulationService.canAccess(id, authentication)) {
             throw new AccessDeniedException("Un prêt actif ou une réservation disponible est nécessaire pour télécharger ce catalogue.");
         }
-        return ResponseEntity.ok().contentType(MediaType.parseMediaType(document.getContentType())).header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + document.getFileName().replace("\"", "") + "\"").body(document.getContent());
+        byte[] content = document.getContent();
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(document.getContentType()))
+                .contentLength(content == null ? 0 : content.length)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + document.getFileName().replace("\"", "") + "\"")
+                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=300")
+                .body(content);
     }
 }

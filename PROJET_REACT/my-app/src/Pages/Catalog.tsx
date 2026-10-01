@@ -1,7 +1,7 @@
-import { useEffect, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { Download, Upload } from 'lucide-react'
 import { bookService } from '../services/bookService'
-import { catalogCirculationService } from '../services/catalogCirculationService'
+import { catalogCirculationService, clearCatalogCache } from '../services/catalogCirculationService'
 import { api } from '../services/api'
 import { useAuth } from '../AuthContext'
 import DataTable, { type TableColumn } from '../Components/ui/DataTable'
@@ -25,11 +25,18 @@ const Catalog = () => {
   const { user } = useAuth()
   const [books, setBooks] = useState<Book[]>([])
   const [message, setMessage] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [loadingBooks, setLoadingBooks] = useState(true)
+  const [loadingDocs, setLoadingDocs] = useState(true)
   const [documents, setDocuments] = useState<CatalogFile[]>([])
   const [uploading, setUploading] = useState(false)
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [docPage, setDocPage] = useState(0)
+  const [bookPage, setBookPage] = useState(0)
+  const PAGE_SIZE = 20
   const canImport = user?.role === 'admin' || user?.role === 'bibliothecaire'
   const MAX_SIZE = 25 * 1024 * 1024
+  const loading = loadingBooks || loadingDocs
 
   const documentColumns: TableColumn<CatalogFile>[] = [
     { key: 'name', label: 'Document', render: (document) => <span className="font-medium">{document.name}</span> },
@@ -63,29 +70,58 @@ const Catalog = () => {
     },
   ]
 
-  const load = async () => {
-    setLoading(true)
-    try {
-      const [bookResult, documentResult] = await Promise.allSettled([bookService.getAll(), api.get<CatalogFile[]>('/catalogs')])
-      if (bookResult.status === 'fulfilled' && Array.isArray(bookResult.value.data)) {
-        setBooks(bookResult.value.data as Book[])
-      }
-      if (documentResult.status === 'fulfilled' && Array.isArray(documentResult.value.data)) {
-        setDocuments(documentResult.value.data)
-      }
-      if (bookResult.status === 'rejected' || documentResult.status === 'rejected') {
-        const status = documentResult.status === 'rejected' ? (documentResult.reason?.response?.status as number | undefined) : undefined
-        setMessage(status === 403
-          ? 'Accès réservé au personnel pour la liste des documents.'
-          : 'Impossible de charger le catalogue depuis le serveur. Vérifiez que le backend a démarré puis réessayez.')
-      } else {
-        setMessage('')
-      }
+  const load = useCallback(async () => {
+    setLoadingBooks(true)
+    setLoadingDocs(true)
+    const [bookResult, documentResult] = await Promise.allSettled([bookService.getAll(), api.get<CatalogFile[]>('/catalogs')])
+    if (bookResult.status === 'fulfilled' && Array.isArray(bookResult.value.data)) {
+      setBooks(bookResult.value.data as Book[])
     }
-    catch { setMessage('Impossible de charger le catalogue depuis le serveur.') }
-    finally { setLoading(false) }
-  }
-  useEffect(() => { void load() }, [])
+    if (documentResult.status === 'fulfilled' && Array.isArray(documentResult.value.data)) {
+      setDocuments(documentResult.value.data)
+    }
+    if (bookResult.status === 'rejected' || documentResult.status === 'rejected') {
+      const status = documentResult.status === 'rejected' ? (documentResult.reason?.response?.status as number | undefined) : undefined
+      setMessage(status === 403
+        ? 'Accès réservé au personnel pour la liste des documents.'
+        : 'Impossible de charger le catalogue depuis le serveur. Vérifiez que le backend a démarré puis réessayez.')
+    } else {
+      setMessage('')
+    }
+    setLoadingBooks(false)
+    setLoadingDocs(false)
+  }, [])
+  useEffect(() => { void load() }, [load])
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(search.trim().toLocaleLowerCase('fr'))
+      setDocPage(0)
+      setBookPage(0)
+    }, 250)
+    return () => clearTimeout(t)
+  }, [search])
+
+  const filteredDocuments = useMemo(() => {
+    if (!debouncedSearch) return documents
+    return documents.filter((d) => (d.name ?? '').toLocaleLowerCase('fr').includes(debouncedSearch))
+  }, [documents, debouncedSearch])
+  const filteredBooks = useMemo(() => {
+    if (!debouncedSearch) return books
+    return books.filter((b) =>
+      [b.title, b.author, b.isbn, b.category].some((v) => (v ?? '').toLocaleLowerCase('fr').includes(debouncedSearch)),
+    )
+  }, [books, debouncedSearch])
+  const pagedDocuments = useMemo(
+    () => filteredDocuments.slice(docPage * PAGE_SIZE, docPage * PAGE_SIZE + PAGE_SIZE),
+    [filteredDocuments, docPage],
+  )
+  const pagedBooks = useMemo(
+    () => filteredBooks.slice(bookPage * PAGE_SIZE, bookPage * PAGE_SIZE + PAGE_SIZE),
+    [filteredBooks, bookPage],
+  )
+  const docPages = Math.max(1, Math.ceil(filteredDocuments.length / PAGE_SIZE))
+  const bookPages = Math.max(1, Math.ceil(filteredBooks.length / PAGE_SIZE))
 
   const upload = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? [])
@@ -109,10 +145,10 @@ const Catalog = () => {
       }
       await load()
     } catch (error: any) { setMessage(error.response?.data?.message ?? 'Import impossible.') }
-    finally { setUploading(false) }
+    finally { setUploading(false); clearCatalogCache() }
   }
 
-  const download = async (document: { id: number; name: string }) => {
+  const download = useCallback(async (document: { id: number; name: string }) => {
     try { await catalogCirculationService.download(document.id, document.name) }
     catch (error: any) {
       const status = error?.response?.status as number | undefined
@@ -120,7 +156,7 @@ const Catalog = () => {
         ? 'Téléchargement réservé : empruntez ce catalogue ou attendez une réservation disponible.'
         : (error?.response?.data?.message ?? 'Téléchargement impossible.'))
     }
-  }
+  }, [])
 
   return <section className="page">
     <PageHeader
@@ -130,17 +166,42 @@ const Catalog = () => {
       extra={canImport && <label className="btn-primary"><Upload size={18} />{uploading ? 'Import en cours…' : 'Importer un catalogue'}<input className="hidden" type="file" accept=".csv,.pdf,text/csv,application/pdf" multiple onChange={upload} disabled={uploading} /></label>}
     />
     {message && <Alert>{message}</Alert>}
-    <h2 className="mb-3 mt-6 text-xl font-bold">Documents importés ({documents.length})</h2>
-    <div className="table-card">
-      <DataTable
-        columns={documentColumns}
-        data={documents}
-        emptyMessage="Aucun document importé."
-        rowKey={(document) => String(document.id)}
+    <div className="card mt-6">
+      <input
+        type="search"
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        placeholder="Rechercher un document, titre, auteur, ISBN…"
+        aria-label="Rechercher dans le catalogue"
+        className="input"
       />
     </div>
-    <h2 className="mb-3 mt-6 text-xl font-bold">Ouvrages ({books.length})</h2>
-    <div className="table-card">{loading ? <p className="p-4 text-slate-600">Chargement…</p> : <DataTable columns={bookColumns} data={books} emptyMessage="Aucun ouvrage au catalogue." rowKey={(book) => String(book.id)} />}</div>
+    <h2 className="mb-3 mt-6 text-xl font-bold">Documents importés ({filteredDocuments.length})</h2>
+    <div className="table-card">
+      {loadingDocs ? <p className="p-4 text-slate-600">Chargement des documents…</p> : <DataTable
+        columns={documentColumns}
+        data={pagedDocuments}
+        emptyMessage="Aucun document importé."
+        rowKey={(document) => String(document.id)}
+      />}
+      {docPages > 1 && (
+        <div className="flex items-center justify-center gap-3 border-t border-slate-200 bg-white px-6 py-3 text-sm">
+          <button type="button" disabled={docPage === 0} onClick={() => setDocPage((p) => Math.max(0, p - 1))} className="btn-outline px-3 py-1 disabled:opacity-40">Précédent</button>
+          <span>Page {docPage + 1} / {docPages}</span>
+          <button type="button" disabled={docPage + 1 >= docPages} onClick={() => setDocPage((p) => p + 1)} className="btn-outline px-3 py-1 disabled:opacity-40">Suivant</button>
+        </div>
+      )}
+    </div>
+    <h2 className="mb-3 mt-6 text-xl font-bold">Ouvrages ({filteredBooks.length})</h2>
+    <div className="table-card">{loadingBooks ? <p className="p-4 text-slate-600">Chargement des ouvrages…</p> : <DataTable columns={bookColumns} data={pagedBooks} emptyMessage="Aucun ouvrage au catalogue." rowKey={(book) => String(book.id)} />}
+      {bookPages > 1 && (
+        <div className="flex items-center justify-center gap-3 border-t border-slate-200 bg-white px-6 py-3 text-sm">
+          <button type="button" disabled={bookPage === 0} onClick={() => setBookPage((p) => Math.max(0, p - 1))} className="btn-outline px-3 py-1 disabled:opacity-40">Précédent</button>
+          <span>Page {bookPage + 1} / {bookPages}</span>
+          <button type="button" disabled={bookPage + 1 >= bookPages} onClick={() => setBookPage((p) => p + 1)} className="btn-outline px-3 py-1 disabled:opacity-40">Suivant</button>
+        </div>
+      )}
+    </div>
   </section>
 }
 

@@ -37,12 +37,52 @@ export type CatalogDocumentReservation = {
   pickupDeadline: string | null
 }
 
+const DOC_CACHE_TTL = 30 * 1000
+
+let docCache: { staff: CatalogDocument[] | null; pub: CatalogDocument[] | null; at: number } = {
+  staff: null,
+  pub: null,
+  at: 0,
+}
+let staffPending: Promise<CatalogDocument[]> | null = null
+let pubPending: Promise<CatalogDocument[]> | null = null
+
+export const clearCatalogCache = () => {
+  docCache = { staff: null, pub: null, at: 0 }
+  staffPending = null
+  pubPending = null
+}
+
+const isFresh = () => Date.now() - docCache.at < DOC_CACHE_TTL
+
+async function fetchStaffDocuments(): Promise<CatalogDocument[]> {
+  if (docCache.staff && isFresh()) return docCache.staff
+  if (!staffPending) {
+    staffPending = api.get<CatalogDocument[]>('/catalog-circulation/documents').then((r) => {
+      docCache = { ...docCache, staff: r.data, at: Date.now() }
+      return r.data
+    }).finally(() => { staffPending = null })
+  }
+  return staffPending
+}
+
+async function fetchPublicDocuments(): Promise<CatalogDocument[]> {
+  if (docCache.pub && isFresh()) return docCache.pub
+  if (!pubPending) {
+    pubPending = api.get<CatalogDocument[]>('/public/catalogs').then((r) => {
+      docCache = { ...docCache, pub: r.data, at: Date.now() }
+      return r.data
+    }).finally(() => { pubPending = null })
+  }
+  return pubPending
+}
+
 export const catalogCirculationService = {
   getDocuments() {
-    return api.get<CatalogDocument[]>('/catalog-circulation/documents')
+    return fetchStaffDocuments().then((data) => ({ data }) as { data: CatalogDocument[] })
   },
   getPublicDocuments() {
-    return api.get<CatalogDocument[]>('/public/catalogs')
+    return fetchPublicDocuments().then((data) => ({ data }) as { data: CatalogDocument[] })
   },
   getLoans() {
     return api.get<CatalogDocumentLoan[]>('/catalog-circulation/loans')

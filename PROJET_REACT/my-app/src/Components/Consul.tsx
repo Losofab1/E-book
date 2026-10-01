@@ -38,7 +38,12 @@ const Consul = () => {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [bookPage, setBookPage] = useState(0)
+  const [docPage, setDocPage] = useState(0)
   const [reader, setReader] = useState<Reader>({ kind: 'closed' })
+  const BOOK_PAGE_SIZE = 12
+  const DOC_PAGE_SIZE = 10
 
   useEffect(() => {
     let cancelled = false
@@ -62,7 +67,7 @@ const Consul = () => {
     return () => { cancelled = true }
   }, [])
 
-  const term = search.trim().toLocaleLowerCase('fr')
+  const term = debouncedSearch.trim().toLocaleLowerCase('fr')
   const filteredBooks = useMemo(() => {
     if (!term) return books
     return books.filter((book) =>
@@ -73,6 +78,25 @@ const Consul = () => {
     if (!term) return documents
     return documents.filter((document) => (document.name ?? '').toLocaleLowerCase('fr').includes(term))
   }, [documents, term])
+  const pagedBooks = useMemo(
+    () => filteredBooks.slice(bookPage * BOOK_PAGE_SIZE, bookPage * BOOK_PAGE_SIZE + BOOK_PAGE_SIZE),
+    [filteredBooks, bookPage],
+  )
+  const pagedDocuments = useMemo(
+    () => filteredDocuments.slice(docPage * DOC_PAGE_SIZE, docPage * DOC_PAGE_SIZE + DOC_PAGE_SIZE),
+    [filteredDocuments, docPage],
+  )
+  const bookPages = Math.max(1, Math.ceil(filteredBooks.length / BOOK_PAGE_SIZE))
+  const docPages = Math.max(1, Math.ceil(filteredDocuments.length / DOC_PAGE_SIZE))
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(search)
+      setBookPage(0)
+      setDocPage(0)
+    }, 250)
+    return () => clearTimeout(t)
+  }, [search])
 
   const closeReader = () => {
     setReader((current) => {
@@ -187,8 +211,9 @@ const Consul = () => {
           {filteredBooks.length === 0 ? (
             <p className="rounded-2xl bg-white p-8 text-center text-slate-600 shadow">Aucun ouvrage disponible pour le moment.</p>
           ) : (
+            <>
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredBooks.map((book) => (
+              {pagedBooks.map((book) => (
                 <article key={book.id} className="rounded-2xl border border-green-100 bg-white p-6 shadow-md transition hover:-translate-y-1 hover:shadow-lg">
                   <div className="flex items-start justify-between gap-4">
                     <BookOpenText className="shrink-0 text-primary-700" size={28} strokeWidth={1.5} />
@@ -208,15 +233,24 @@ const Consul = () => {
                 </article>
               ))}
             </div>
+            {bookPages > 1 && (
+              <div className="mt-5 flex items-center justify-center gap-3 text-sm">
+                <button type="button" disabled={bookPage === 0} onClick={() => setBookPage((p) => Math.max(0, p - 1))} className="btn-outline px-3 py-1.5 disabled:opacity-40">Précédent</button>
+                <span>Page {bookPage + 1} / {bookPages}</span>
+                <button type="button" disabled={bookPage + 1 >= bookPages} onClick={() => setBookPage((p) => p + 1)} className="btn-outline px-3 py-1.5 disabled:opacity-40">Suivant</button>
+              </div>
+            )}
+            </>
           )}
 
           <h2 className="mb-3 mt-10 text-xl font-bold">Catalogues numériques ({filteredDocuments.length})</h2>
           {filteredDocuments.length === 0 ? (
             <p className="rounded-2xl bg-white p-8 text-center text-slate-600 shadow">Aucun catalogue importé pour le moment.</p>
           ) : (
+            <>
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md">
               <ul className="divide-y divide-slate-200">
-                {filteredDocuments.map((document) => (
+                {pagedDocuments.map((document) => (
                   <li key={document.id} className="flex flex-wrap items-center justify-between gap-4 p-5">
                     <div className="flex min-w-0 items-center gap-3">
                       <FileText className="shrink-0 text-primary-700" size={26} strokeWidth={1.5} />
@@ -245,6 +279,14 @@ const Consul = () => {
                 ))}
               </ul>
             </div>
+            {docPages > 1 && (
+              <div className="mt-5 flex items-center justify-center gap-3 text-sm">
+                <button type="button" disabled={docPage === 0} onClick={() => setDocPage((p) => Math.max(0, p - 1))} className="btn-outline px-3 py-1.5 disabled:opacity-40">Précédent</button>
+                <span>Page {docPage + 1} / {docPages}</span>
+                <button type="button" disabled={docPage + 1 >= docPages} onClick={() => setDocPage((p) => p + 1)} className="btn-outline px-3 py-1.5 disabled:opacity-40">Suivant</button>
+              </div>
+            )}
+            </>
           )}
         </>
       )}

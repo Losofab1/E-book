@@ -83,13 +83,16 @@ public class PublicCatalogController {
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_PDF)
                     .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"apercu-" + sanitize(document.getFileName()) + "\"")
+                    .header(HttpHeaders.CACHE_CONTROL, "public, max-age=3600")
+                    .contentLength(firstPage.length)
                     .body(firstPage);
         }
-        String text = new String(document.getContent(), StandardCharsets.UTF_8);
-        String preview = Arrays.stream(text.split("\r?\n")).limit(PREVIEW_CSV_LINES).collect(Collectors.joining("\n"));
+        byte[] preview = extractCsvPreview(document.getContent());
         return ResponseEntity.ok()
                 .contentType(MediaType.TEXT_PLAIN)
-                .body(preview.getBytes(StandardCharsets.UTF_8));
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=3600")
+                .contentLength(preview.length)
+                .body(preview);
     }
 
     private CatalogDocument findDocument(Long id) {
@@ -107,7 +110,13 @@ public class PublicCatalogController {
     }
 
     private byte[] extractFirstPdfPage(byte[] pdfBytes) {
-        try (PDDocument source = PDDocument.load(pdfBytes); PDDocument preview = new PDDocument()) {
+        if (pdfBytes == null || pdfBytes.length == 0) {
+            throw new IllegalArgumentException("Aperçu impossible pour ce PDF.");
+        }
+        try (java.io.InputStream in = new java.io.ByteArrayInputStream(pdfBytes);
+                PDDocument source = PDDocument.load(in,
+                org.apache.pdfbox.io.MemoryUsageSetting.setupTempFileOnly());
+                PDDocument preview = new PDDocument()) {
             if (source.getNumberOfPages() == 0) {
                 throw new IllegalArgumentException("Ce PDF ne contient aucune page lisible.");
             }
@@ -119,5 +128,19 @@ public class PublicCatalogController {
         } catch (IOException e) {
             throw new IllegalArgumentException("Aperçu impossible pour ce PDF.");
         }
+    }
+
+    /**
+     * N'analyse que le début du fichier (64 Ko) au lieu de charger
+     * l'intégralité d'un CSV de 25 Mo pour 20 lignes.
+     */
+    private byte[] extractCsvPreview(byte[] content) {
+        if (content == null || content.length == 0) {
+            return new byte[0];
+        }
+        int limit = Math.min(content.length, 64 * 1024);
+        String head = new String(content, 0, limit, StandardCharsets.UTF_8);
+        String preview = Arrays.stream(head.split("\r?\n")).limit(PREVIEW_CSV_LINES).collect(Collectors.joining("\n"));
+        return preview.getBytes(StandardCharsets.UTF_8);
     }
 }
