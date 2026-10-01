@@ -137,7 +137,15 @@ export const catalogCirculationService = {
     return response.data
   },
   async fetchFullBlob(id: number) {
-    const response = await api.get<Blob>(`/catalogs/${id}/content`, { responseType: 'blob' })
-    return response.data
+    try {
+      const response = await api.get<Blob>(`/catalogs/${id}/content`, { responseType: 'blob' })
+      return response.data
+    } catch (error: any) {
+      if (error?.response?.status === 404) {
+        const fallback = await api.get<Blob>(`/catalogs/${id}/download`, { responseType: 'blob' })
+        return fallback.data
+      }
+      throw error
+    }
   },
 }

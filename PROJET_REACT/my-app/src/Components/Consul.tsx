@@ -10,9 +10,21 @@ import Alert from './ui/Alert'
 import StatusBadge from './ui/StatusBadge'
 import ReaderModal from './ui/ReaderModal'
 import ShowMoreButton from './ui/ShowMoreButton'
+import ErrorBoundary from './ui/ErrorBoundary'
 import CatalogCsvReader from './ui/CatalogCsvReader'
 
-const CatalogPdfReader = lazy(() => import('./ui/CatalogPdfReader'))
+/** Recharge le lecteur PDF : 1 nouvel essai après une coupure réseau brève. */
+function lazyPdfReader() {
+  return lazy(() => new Promise<{ default: typeof import('./ui/CatalogPdfReader').default }>((resolve, reject) => {
+    import('./ui/CatalogPdfReader').then(resolve).catch(() => {
+      setTimeout(() => {
+        import('./ui/CatalogPdfReader').then(resolve).catch(reject)
+      }, 1500)
+    })
+  }))
+}
+
+const CatalogPdfReader = lazyPdfReader()
 
 type Book = { id: number; title: string; author: string; category: string; availableCopies: number }
 
@@ -370,13 +382,40 @@ const Consul = () => {
         >
           {reader.loading && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement…</p>}
           {!reader.loading && reader.error && <Alert variant="error">{reader.error}</Alert>}
-          {!reader.loading && !reader.error && reader.isPdf && (
-            <Suspense fallback={<p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement du lecteur PDF…</p>}>
-              <CatalogPdfReader url={reader.fullUrl ?? reader.previewUrl ?? ''} title={reader.document.name} />
-            </Suspense>
-          )}
-          {!reader.loading && !reader.error && !reader.isPdf && (
-            <CatalogCsvReader text={reader.fullText ?? reader.previewText ?? ''} title={reader.document.name} />
+          {!reader.loading && !reader.error && (
+            <ErrorBoundary
+              fallback={
+                <div className="space-y-3">
+                  <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                    Le lecteur n’a pas pu s’afficher (connexion instable ou mise à jour en cours).
+                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={() => window.location.reload()}
+                      className="btn-primary min-h-[44px] flex-1 text-sm"
+                    >
+                      Recharger la page
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => closeReader()}
+                      className="btn-outline min-h-[44px] flex-1 text-sm"
+                    >
+                      Revenir au catalogue
+                    </button>
+                  </div>
+                </div>
+              }
+            >
+              {reader.isPdf ? (
+                <Suspense fallback={<p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement du lecteur PDF…</p>}>
+                  <CatalogPdfReader url={reader.fullUrl ?? reader.previewUrl ?? ''} title={reader.document.name} />
+                </Suspense>
+              ) : (
+                <CatalogCsvReader text={reader.fullText ?? reader.previewText ?? ''} title={reader.document.name} />
+              )}
+            </ErrorBoundary>
           )}
         </ReaderModal>
       )}
