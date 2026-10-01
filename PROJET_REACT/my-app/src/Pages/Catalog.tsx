@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react'
-import { Download, Trash2, Upload } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { BookOpen, Download, Trash2, Upload } from 'lucide-react'
 import { bookService } from '../services/bookService'
 import { catalogCirculationService, clearCatalogCache } from '../services/catalogCirculationService'
 import { api } from '../services/api'
@@ -58,13 +59,22 @@ const Catalog = () => {
       label: 'Action',
       render: (document) => (
         <span className="inline-flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => void download({ id: document.id, name: document.name })}
-            className="inline-flex items-center gap-1 text-sm font-medium text-primary-800 hover:underline"
-          >
-            <Download size={16} />Télécharger
-          </button>
+          {canImport ? (
+            <button
+              type="button"
+              onClick={() => void download({ id: document.id, name: document.name })}
+              className="inline-flex items-center gap-1 text-sm font-medium text-primary-800 hover:underline"
+            >
+              <Download size={16} />Télécharger
+            </button>
+          ) : (
+            <Link
+              to="/consulter"
+              className="inline-flex items-center gap-1 text-sm font-medium text-primary-800 hover:underline"
+            >
+              <BookOpen size={16} />Lire
+            </Link>
+          )}
           {isAdmin && (
             <button
               type="button"
@@ -149,10 +159,7 @@ const Catalog = () => {
   const download = useCallback(async (document: { id: number; name: string }) => {
     try { await catalogCirculationService.download(document.id, document.name) }
     catch (error: any) {
-      const status = error?.response?.status as number | undefined
-      setMessage(status === 403
-        ? 'Téléchargement réservé : empruntez ce catalogue ou attendez une réservation disponible.'
-        : (error?.response?.data?.message ?? 'Téléchargement impossible.'))
+      setMessage(error?.response?.data?.message ?? 'Téléchargement impossible.')
     }
   }, [])
 

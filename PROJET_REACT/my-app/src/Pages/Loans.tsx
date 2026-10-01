@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BookOpenText, CalendarClock, Check, RotateCcw, Search, UserRound } from 'lucide-react'
+import { BookOpenText, CalendarClock, Check, Search, Undo2, UserRound, XCircle } from 'lucide-react'
 import { api } from '../services/api'
 import { bookService } from '../services/bookService'
 import { catalogCirculationService, type CatalogDocument, type CatalogDocumentLoan } from '../services/catalogCirculationService'
@@ -40,6 +40,7 @@ const Loans = () => {
   const [loadingDocumentLoans, setLoadingDocumentLoans] = useState(true)
   const [loadingUsers, setLoadingUsers] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [acting, setActing] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [showAllLoans, setShowAllLoans] = useState(false)
   const [showAllDocumentLoans, setShowAllDocumentLoans] = useState(false)
@@ -285,23 +286,13 @@ const Loans = () => {
   }
 
   const returnLoan = async (id: number) => {
-    try {
-      await loanService.returnLoan(String(id))
-      setMessage('Retour enregistré.')
-      setRefreshKey(key => key + 1)
-    } catch {
-      setMessage('Retour impossible.')
-    }
+    if (!window.confirm('Enregistrer le retour de ce prêt ? L’exemplaire redeviendra disponible.')) return
+    await runLoanAction(`book-return-${id}`, () => loanService.returnLoan(String(id)), 'Retour enregistré.', 'Retour impossible.')
   }
 
   const cancelLoan = async (id: number) => {
-    try {
-      await loanService.cancelLoan(String(id))
-      setMessage('Prêt annulé.')
-      setRefreshKey(key => key + 1)
-    } catch {
-      setMessage('Annulation impossible.')
-    }
+    if (!window.confirm('Annuler ce prêt ? L’exemplaire redeviendra disponible.')) return
+    await runLoanAction(`book-cancel-${id}`, () => loanService.cancelLoan(String(id)), 'Prêt annulé.', 'Annulation impossible.')
   }
 
   const downloadDocument = async (id: number, name: string) => {
@@ -313,46 +304,39 @@ const Loans = () => {
   }
 
   const returnDocumentLoan = async (id: number) => {
-    try {
-      await catalogCirculationService.returnLoan(id)
-      setMessage('Retour du document enregistré.')
-      setRefreshKey(key => key + 1)
-    } catch {
-      setMessage('Retour impossible.')
-    }
+    if (!window.confirm('Enregistrer le retour de ce catalogue ? L’exemplaire redeviendra disponible.')) return
+    await runLoanAction(`doc-return-${id}`, () => catalogCirculationService.returnLoan(id), 'Retour du document enregistré.', 'Retour impossible.')
   }
 
   const cancelDocumentLoan = async (id: number) => {
-    try {
-      await catalogCirculationService.cancelLoan(id)
-      setMessage('Prêt du document annulé.')
-      setRefreshKey(key => key + 1)
-    } catch {
-      setMessage('Annulation impossible.')
-    }
+    if (!window.confirm('Annuler ce prêt de catalogue ? L’exemplaire redeviendra disponible.')) return
+    await runLoanAction(`doc-cancel-${id}`, () => catalogCirculationService.cancelLoan(id), 'Prêt du document annulé.', 'Annulation impossible.')
   }
 
   const extendDocumentLoan = async (item: CatalogDocumentLoan) => {
     const dueAt = new Date(item.dueAt)
     dueAt.setDate(dueAt.getDate() + 14)
-    try {
-      await catalogCirculationService.extendLoan(item.id, dueAt.toISOString())
-      setMessage('Emprunt du document prolongé de 14 jours.')
-      setRefreshKey(key => key + 1)
-    } catch {
-      setMessage('Prolongation impossible.')
-    }
+    await runLoanAction(`doc-extend-${item.id}`, () => catalogCirculationService.extendLoan(item.id, dueAt.toISOString()), 'Emprunt du document prolongé de 14 jours.', 'Prolongation impossible.')
   }
 
   const extendLoan = async (item: Loan) => {
     const dueAt = new Date(item.dueAt)
     dueAt.setDate(dueAt.getDate() + 14)
+    await runLoanAction(`book-extend-${item.id}`, () => loanService.extendLoan(String(item.id), dueAt.toISOString()), 'Prêt prolongé de 14 jours.', 'Prolongation impossible.')
+  }
+
+  const runLoanAction = async (key: string, action: () => Promise<unknown>, success: string, failure: string) => {
+    if (acting) return
+    setActing(key)
+    setMessage('')
     try {
-      await loanService.extendLoan(String(item.id), dueAt.toISOString())
-      setMessage('Prêt prolongé de 14 jours.')
-      setRefreshKey(key => key + 1)
-    } catch {
-      setMessage('Prolongation impossible.')
+      await action()
+      setMessage(success)
+      setRefreshKey((k) => k + 1)
+    } catch (error: any) {
+      setMessage(error?.response?.data?.message ?? failure)
+    } finally {
+      setActing(null)
     }
   }
 
@@ -542,7 +526,7 @@ const Loans = () => {
                       : item.status === 'CANCELED'
                         ? <StatusBadge label="Annulé" variant="danger" />
                         : <StatusBadge label={item.status} variant="neutral" />}</td>
-                  <td className="p-3"><div className="flex flex-wrap gap-3">{item.status === 'BORROWED' && <>{staff && <button type="button" onClick={() => void extendLoan(item)} className="inline-flex items-center gap-1 text-sm font-medium text-blue-800 hover:underline"><CalendarClock size={16} />Prolonger</button>}<button type="button" onClick={() => void returnLoan(item.id)} className="inline-flex items-center gap-1 text-sm font-medium text-green-800 hover:underline"><RotateCcw size={16} />Retour</button><button type="button" onClick={() => void cancelLoan(item.id)} className="inline-flex items-center gap-1 text-sm font-medium text-red-700 hover:underline"><RotateCcw size={16} />Annuler</button></>}</div></td>
+                  <td className="p-3"><div className="flex flex-wrap items-center gap-2">{item.status === 'BORROWED' && <>{staff && <button type="button" onClick={() => void extendLoan(item)} disabled={acting !== null} aria-label={`Prolonger le prêt ${item.id} de 14 jours`} className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-2 text-sm font-medium text-blue-800 hover:bg-blue-50 disabled:opacity-40"><CalendarClock size={18} />{acting === `book-extend-${item.id}` ? 'En cours…' : 'Prolonger'}</button>}<button type="button" onClick={() => void returnLoan(item.id)} disabled={acting !== null} aria-label={`Enregistrer le retour du prêt ${item.id}`} title="Rendre l’exemplaire disponible" className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-2 text-sm font-medium text-green-800 hover:bg-green-50 disabled:opacity-40"><Undo2 size={18} />{acting === `book-return-${item.id}` ? 'En cours…' : 'Retour'}</button><button type="button" onClick={() => void cancelLoan(item.id)} disabled={acting !== null} aria-label={`Annuler le prêt ${item.id}`} title="Annuler ce prêt" className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-40"><XCircle size={18} />{acting === `book-cancel-${item.id}` ? 'En cours…' : 'Annuler'}</button></>}</div></td>
                 </tr>
               ))}
               {!loadingLoans && !loansError && items.length === 0 && <tr><td colSpan={staff ? 5 : 4} className="p-8 text-center text-slate-600">Aucun prêt à afficher.</td></tr>}
@@ -577,7 +561,7 @@ const Loans = () => {
                       ? <StatusBadge label="Annulé" variant="danger" />
                       : <StatusBadge label={item.status} variant="neutral" />}</td>
                 {staff && <td className="p-3">{item.status === 'BORROWED' && <button type="button" onClick={() => void downloadDocument(item.catalogDocumentId, item.catalogDocumentName)} className="font-medium text-green-800 hover:underline">Télécharger</button>}</td>}
-                <td className="p-3"><div className="flex flex-wrap gap-3">{item.status === 'BORROWED' && <>{staff && <button type="button" onClick={() => void extendDocumentLoan(item)} className="text-sm font-medium text-blue-800 hover:underline">Prolonger</button>}<button type="button" onClick={() => void returnDocumentLoan(item.id)} className="text-sm font-medium text-green-800 hover:underline">Retour</button><button type="button" onClick={() => void cancelDocumentLoan(item.id)} className="text-sm font-medium text-red-700 hover:underline">Annuler</button></>}</div></td>
+                <td className="p-3"><div className="flex flex-wrap items-center gap-2">{item.status === 'BORROWED' && <>{staff && <button type="button" onClick={() => void extendDocumentLoan(item)} disabled={acting !== null} aria-label={`Prolonger le prêt du catalogue ${item.id} de 14 jours`} className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-2 text-sm font-medium text-blue-800 hover:bg-blue-50 disabled:opacity-40">Prolonger</button>}<button type="button" onClick={() => void returnDocumentLoan(item.id)} disabled={acting !== null} aria-label={`Enregistrer le retour du catalogue ${item.catalogDocumentName}`} title="Rendre l’exemplaire disponible" className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-2 text-sm font-medium text-green-800 hover:bg-green-50 disabled:opacity-40"><Undo2 size={18} />{acting === `doc-return-${item.id}` ? 'En cours…' : 'Retour'}</button><button type="button" onClick={() => void cancelDocumentLoan(item.id)} disabled={acting !== null} aria-label={`Annuler le prêt du catalogue ${item.catalogDocumentName}`} title="Annuler ce prêt" className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-40"><XCircle size={18} />{acting === `doc-cancel-${item.id}` ? 'En cours…' : 'Annuler'}</button></>}</div></td>
               </tr>)}
               {!loadingDocumentLoans && !documentLoansError && documentLoans.length === 0 && <tr><td colSpan={staff ? 6 : 4} className="p-8 text-center text-slate-600">Aucun prêt de catalogue numérique.</td></tr>}
               {loadingDocumentLoans && <tr><td colSpan={staff ? 6 : 4} className="p-8 text-center text-slate-600">Chargement des prêts numériques…</td></tr>}

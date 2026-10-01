@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Maximize, Minimize, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { ArrowLeft, Maximize, Minimize, X } from 'lucide-react'
 import StatusBadge from './StatusBadge'
 
 type ReaderBadgeVariant = 'success' | 'warning' | 'info' | 'neutral'
@@ -49,10 +49,19 @@ const ReaderModal = ({ title, badgeLabel, badgeVariant, notice, actions, childre
     }
   }
 
+  const handleClose = useCallback(async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen()
+    } catch {
+      /* sortie plein écran impossible, on ferme quand même */
+    }
+    onClose()
+  }, [onClose])
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/60 sm:items-center sm:p-4"
-      onClick={onClose}
+      onClick={() => void handleClose()}
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -64,6 +73,16 @@ const ReaderModal = ({ title, badgeLabel, badgeVariant, notice, actions, childre
       >
         <div className="flex items-center justify-between gap-2 border-b border-slate-200 p-3 sm:gap-3 sm:p-5">
           <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={() => void handleClose()}
+              aria-label="Retour à la liste"
+              title="Retour"
+              className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center gap-1.5 rounded-xl bg-slate-100 px-2 text-sm font-semibold text-slate-800 hover:bg-slate-200"
+            >
+              <ArrowLeft size={22} />
+              <span className="hidden pr-1 sm:inline">Retour</span>
+            </button>
             <h2 className="min-w-0 flex-1 truncate text-base font-bold sm:text-xl">{title}</h2>
             <StatusBadge label={badgeLabel} variant={badgeVariant} />
           </div>
@@ -79,8 +98,9 @@ const ReaderModal = ({ title, badgeLabel, badgeVariant, notice, actions, childre
             </button>
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => void handleClose()}
               aria-label="Fermer le lecteur"
+              title="Fermer"
               className="min-h-[44px] min-w-[44px] rounded-xl p-2 text-slate-600 hover:bg-slate-100"
             >
               <X size={22} />

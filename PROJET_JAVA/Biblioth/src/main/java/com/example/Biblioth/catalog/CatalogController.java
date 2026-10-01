@@ -99,9 +99,24 @@ public class CatalogController {
 
     @GetMapping("/{id}/download")
     public ResponseEntity<byte[]> download(@PathVariable Long id, Authentication authentication) {
+        if (!isStaff(authentication)) {
+            throw new AccessDeniedException("Téléchargement réservé au personnel.");
+        }
+        CatalogDocument document = repository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Catalogue introuvable."));
+        byte[] content = document.getContent();
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(document.getContentType()))
+                .contentLength(content == null ? 0 : content.length)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + document.getFileName().replace("\"", "") + "\"")
+                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=300")
+                .body(content);
+    }
+
+    @GetMapping("/{id}/content")
+    public ResponseEntity<byte[]> content(@PathVariable Long id, Authentication authentication) {
         CatalogDocument document = repository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Catalogue introuvable."));
         if (!circulationService.canAccess(id, authentication)) {
-            throw new AccessDeniedException("Un prêt actif ou une réservation disponible est nécessaire pour télécharger ce catalogue.");
+            throw new AccessDeniedException("Un prêt actif ou une réservation disponible est nécessaire pour lire ce catalogue.");
         }
         byte[] content = document.getContent();
         return ResponseEntity.ok()
@@ -110,6 +125,11 @@ public class CatalogController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + document.getFileName().replace("\"", "") + "\"")
                 .header(HttpHeaders.CACHE_CONTROL, "private, max-age=300")
                 .body(content);
+    }
+
+    private boolean isStaff(Authentication authentication) {
+        return authentication != null && authentication.getAuthorities().stream().anyMatch(authority ->
+                authority.getAuthority().equals("ROLE_ADMIN") || authority.getAuthority().equals("ROLE_BIBLIOTHECAIRE"));
     }
 
     @DeleteMapping("/{id}")
