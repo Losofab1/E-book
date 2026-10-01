@@ -29,6 +29,13 @@ public class CatalogDocument {
     @Column(nullable = false)
     private byte[] content;
 
+    @Basic(fetch = FetchType.LAZY)
+    @Column(name = "preview_content")
+    private byte[] previewContent;
+
+    @Column(name = "preview_content_type")
+    private String previewContentType;
+
     @Column(nullable = false)
     private LocalDateTime uploadedAt;
 
@@ -67,6 +74,22 @@ public class CatalogDocument {
 
     public void setContent(byte[] value) {
         content = value;
+    }
+
+    public byte[] getPreviewContent() {
+        return previewContent;
+    }
+
+    public void setPreviewContent(byte[] value) {
+        previewContent = value;
+    }
+
+    public String getPreviewContentType() {
+        return previewContentType;
+    }
+
+    public void setPreviewContentType(String value) {
+        previewContentType = value;
     }
 
     public LocalDateTime getUploadedAt() {

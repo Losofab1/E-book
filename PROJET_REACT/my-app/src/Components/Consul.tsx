@@ -36,6 +36,7 @@ type CatalogReader = {
   loading: boolean
   error: string
   fullAccess: boolean
+  fullLoading: boolean
   isPdf: boolean
   previewUrl: string | null
   previewText: string | null
@@ -158,17 +159,32 @@ const Consul = () => {
     pushReaderHistory()
     const isPdf = (document.contentType ?? '').toLowerCase().includes('pdf')
       || (document.name ?? '').toLowerCase().endsWith('.pdf')
-    setReader({
-      kind: 'catalog', document, loading: true, error: '', fullAccess: false, isPdf,
-      previewUrl: null, previewText: null, fullUrl: null, fullText: null, fullTextUrl: null,
-    })
+    const baseReader = {
+      kind: 'catalog' as const,
+      document,
+      error: '',
+      fullAccess: false,
+      fullLoading: false,
+      isPdf,
+      previewUrl: null as string | null,
+      previewText: null as string | null,
+      fullUrl: null as string | null,
+      fullText: null as string | null,
+      fullTextUrl: null as string | null,
+    }
+    setReader({ ...baseReader, loading: true })
+    const isStale = () => readerSession.current !== session
+    const revokeUrls = (previewUrl: string | null, fullUrl: string | null, fullTextUrl: string | null) => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      if (fullUrl) URL.revokeObjectURL(fullUrl)
+      if (fullTextUrl) URL.revokeObjectURL(fullTextUrl)
+    }
     try {
       const [accessResult, previewResult] = await Promise.allSettled([
         catalogCirculationService.getPublicAccess(document.id),
         catalogCirculationService.fetchPreviewBlob(document.id),
       ])
       if (previewResult.status !== 'fulfilled') throw new Error('preview')
-      const full = accessResult.status === 'fulfilled' && accessResult.value.data.fullAccess && user !== null
       let previewUrl: string | null = null
       let previewText: string | null = null
       if (isPdf) {
@@ -176,34 +192,39 @@ const Consul = () => {
       } else {
         previewText = await previewResult.value.text()
       }
-      let fullUrl: string | null = null
-      let fullText: string | null = null
-      let fullTextUrl: string | null = null
-      if (full) {
+      if (isStale()) {
+        revokeUrls(previewUrl, null, null)
+        return
+      }
+      const entitled = accessResult.status === 'fulfilled' && accessResult.value.data.fullAccess && user !== null
+      setReader({ ...baseReader, loading: false, fullAccess: entitled, fullLoading: entitled, previewUrl, previewText })
+      if (!entitled) return
+      try {
         const blob = await catalogCirculationService.fetchFullBlob(document.id)
+        let fullUrl: string | null = null
+        let fullText: string | null = null
+        let fullTextUrl: string | null = null
         if (isPdf) {
           fullUrl = URL.createObjectURL(blob)
         } else {
           fullText = await blob.text()
           fullTextUrl = URL.createObjectURL(new Blob([fullText], { type: 'text/plain;charset=utf-8' }))
         }
+        if (isStale()) {
+          revokeUrls(previewUrl, fullUrl, fullTextUrl)
+          return
+        }
+        setReader({ ...baseReader, loading: false, fullAccess: true, fullLoading: false, previewUrl, previewText, fullUrl, fullText, fullTextUrl })
+      } catch {
+        if (isStale()) {
+          revokeUrls(previewUrl, null, null)
+          return
+        }
+        setReader((current) => current.kind === 'catalog' ? { ...current, fullLoading: false } : current)
       }
-      if (readerSession.current !== session) {
-        if (previewUrl) URL.revokeObjectURL(previewUrl)
-        if (fullUrl) URL.revokeObjectURL(fullUrl)
-        if (fullTextUrl) URL.revokeObjectURL(fullTextUrl)
-        return
-      }
-      setReader({
-        kind: 'catalog', document, loading: false, error: '', fullAccess: full, isPdf,
-        previewUrl, previewText, fullUrl, fullText, fullTextUrl,
-      })
     } catch {
-      if (readerSession.current !== session) return
-      setReader({
-        kind: 'catalog', document, loading: false, error: 'Lecture impossible pour ce catalogue.', fullAccess: false, isPdf,
-        previewUrl: null, previewText: null, fullUrl: null, fullText: null, fullTextUrl: null,
-      })
+      if (isStale()) return
+      setReader({ ...baseReader, loading: false, error: 'Lecture impossible pour ce catalogue.' })
     }
   }
 
@@ -356,13 +377,15 @@ const Consul = () => {
       {reader.kind === 'catalog' && (
         <ReaderModal
           title={reader.document.name}
-          badgeLabel={reader.loading ? 'Chargement…' : reader.fullAccess && (reader.fullUrl || reader.fullText) ? 'Lecture intégrale' : 'Aperçu — première page'}
-          badgeVariant={reader.fullAccess && (reader.fullUrl || reader.fullText) ? 'success' : 'warning'}
-          notice={!reader.loading && !reader.fullAccess
-            ? (user
-              ? 'Sans emprunt en cours ni réservation disponible, seule la première page est visible.'
-              : 'Connectez-vous et empruntez ce catalogue pour lire l’intégralité.')
-            : undefined}
+          badgeLabel={reader.loading ? 'Chargement…' : reader.fullLoading ? 'Intégrale en cours…' : reader.fullAccess && (reader.fullUrl || reader.fullText) ? 'Lecture intégrale' : 'Aperçu — première page'}
+          badgeVariant={reader.loading || reader.fullLoading ? 'warning' : reader.fullAccess && (reader.fullUrl || reader.fullText) ? 'success' : 'warning'}
+          notice={!reader.loading && !reader.error && reader.fullLoading
+            ? 'Aperçu affiché — la version intégrale charge en arrière-plan.'
+            : !reader.loading && !reader.fullAccess
+              ? (user
+                ? 'Sans emprunt en cours ni réservation disponible, seule la première page est visible.'
+                : 'Connectez-vous et empruntez ce catalogue pour lire l’intégralité.')
+              : undefined}
           onClose={closeReader}
           actions={<>
             {!reader.loading && !reader.fullAccess && (user

@@ -21,7 +21,8 @@ public class CatalogController {
     private final CatalogDocumentRepository repository;
     private final BookService bookService;
     private final CatalogDocumentCirculationService circulationService;
-    public CatalogController(CatalogDocumentRepository repository, BookService bookService, CatalogDocumentCirculationService circulationService) { this.repository = repository; this.bookService = bookService; this.circulationService = circulationService; }
+    private final CatalogPreviewService previewService;
+    public CatalogController(CatalogDocumentRepository repository, BookService bookService, CatalogDocumentCirculationService circulationService, CatalogPreviewService previewService) { this.repository = repository; this.bookService = bookService; this.circulationService = circulationService; this.previewService = previewService; }
 
     @GetMapping
     public List<Map<String, Object>> list() {
@@ -85,12 +86,21 @@ public class CatalogController {
 
     private CatalogDocument storeDocument(MultipartFile file, String name, String lower, Authentication authentication) {
         try {
+            byte[] content = file.getBytes();
+            String contentType = lower.endsWith(".pdf") ? MediaType.APPLICATION_PDF_VALUE : "text/csv";
             CatalogDocument document = new CatalogDocument();
-            document.setFileName(name); document.setContentType(lower.endsWith(".pdf") ? MediaType.APPLICATION_PDF_VALUE : "text/csv");
-            document.setContent(file.getBytes()); document.setUploadedAt(LocalDateTime.now());
+            document.setFileName(name); document.setContentType(contentType);
+            document.setContent(content); document.setUploadedAt(LocalDateTime.now());
             document.setUploadedBy(authentication == null ? "system" : authentication.getName());
             document.setTotalCopies(10);
             document.setAvailableCopies(10);
+            try {
+                document.setPreviewContent(previewService.buildPreview(content, contentType, name));
+                document.setPreviewContentType(previewService.previewContentType(contentType, name));
+            } catch (IllegalArgumentException ignored) {
+                document.setPreviewContent(null);
+                document.setPreviewContentType(null);
+            }
             return repository.save(document);
         } catch (java.io.IOException exception) {
             throw new IllegalArgumentException("Impossible de lire le fichier importé.", exception);

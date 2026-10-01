@@ -28,6 +28,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -239,6 +240,47 @@ class CatalogCirculationIntegrationTest {
         mockMvc.perform(delete("/api/catalogs/{id}", document.getId())
                         .header("Authorization", bearer(admin)))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void uploadStoresPreviewAndPreviewEndpointServesIt() throws Exception {
+        String csv = "Titre;Auteur;ISBN\nLe Petit Prince;Saint-Exupery;978-0156012195\n";
+        String uploadJson = mockMvc.perform(multipart("/api/catalogs")
+                        .file(new org.springframework.mock.web.MockMultipartFile(
+                                "file", "import.csv", "text/csv", csv.getBytes(StandardCharsets.UTF_8)))
+                        .header("Authorization", bearer(admin)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        Long documentId = objectMapper.readTree(uploadJson).get("id").asLong();
+
+        MvcResult preview = mockMvc.perform(get("/api/public/catalogs/{id}/preview", documentId))
+                .andExpect(status().isOk())
+                .andReturn();
+        String previewText = new String(preview.getResponse().getContentAsByteArray(), StandardCharsets.UTF_8);
+        org.junit.jupiter.api.Assertions.assertTrue(previewText.startsWith("Titre;Auteur;ISBN"));
+
+        com.example.Biblioth.catalog.CatalogDocumentPreview stored =
+                documentRepository.findPreviewById(documentId).orElseThrow();
+        org.junit.jupiter.api.Assertions.assertNotNull(stored.getPreviewContent());
+    }
+
+    @Test
+    void previewBackfillsForLegacyDocuments() throws Exception {
+        CatalogDocument document = saveDocument();
+
+        MvcResult preview = mockMvc.perform(get("/api/public/catalogs/{id}/preview", document.getId()))
+                .andExpect(status().isOk())
+                .andReturn();
+        String previewText = new String(preview.getResponse().getContentAsByteArray(), StandardCharsets.UTF_8);
+        org.junit.jupiter.api.Assertions.assertTrue(previewText.contains("Titre"));
+
+        com.example.Biblioth.catalog.CatalogDocumentPreview stored =
+                documentRepository.findPreviewById(document.getId()).orElseThrow();
+        org.junit.jupiter.api.Assertions.assertNotNull(stored.getPreviewContent());
+
+        mockMvc.perform(get("/api/public/catalogs/{id}/preview", document.getId()))
+                .andExpect(status().isOk())
+                .andExpect(content().bytes(stored.getPreviewContent()));
     }
 
     private String loanPayload(Long userId, Long documentId) throws Exception {
