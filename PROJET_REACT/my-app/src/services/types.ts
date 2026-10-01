@@ -70,7 +70,7 @@ export interface Loan {
   id: number
   bookId: number
   userId: number
-  status: 'BORROWED' | 'RETURNED'
+  status: 'BORROWED' | 'RETURNED' | 'CANCELED'
   borrowedAt: string
   dueAt: string
 }

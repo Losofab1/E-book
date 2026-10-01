@@ -122,6 +122,21 @@ public class CatalogDocumentCirculationService {
     }
 
     @Transactional
+    public CatalogDocumentLoanResponse cancelLoan(Long loanId) {
+        CatalogDocumentLoan loan = loanRepository.findById(loanId)
+                .orElseThrow(() -> new ResourceNotFoundException("Prêt de catalogue introuvable."));
+        if (loan.getStatus() != PhysicalLoanStatus.BORROWED) {
+            throw new IllegalArgumentException("Ce prêt est déjà clôturé.");
+        }
+        loan.setStatus(PhysicalLoanStatus.CANCELED);
+        loan.setReturnedAt(LocalDateTime.now());
+        CatalogDocumentLoan saved = loanRepository.save(loan);
+        notificationService.create(loan.getUser().getEmail(), "catalog_loan_canceled",
+                "L'annulation du prêt du catalogue « " + loan.getCatalogDocument().getFileName() + " » est enregistrée.");
+        return mapLoan(saved);
+    }
+
+    @Transactional
     public List<CatalogDocumentReservationResponse> getReservations(Long userId) {
         expireReadyReservations();
         List<CatalogDocumentReservation> reservations = userId == null
@@ -204,6 +219,41 @@ public class CatalogDocumentCirculationService {
         reservation.setStatus(ReservationStatus.CANCELED);
         reservation.setCanceledAt(LocalDateTime.now());
         return mapReservation(reservationRepository.save(reservation));
+    }
+
+    @Transactional
+    public CatalogDocumentLoanResponse pickupReservation(Long reservationId) {
+        expireReadyReservations();
+        CatalogDocumentReservation reservation = reservationRepository.findById(reservationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Réservation de catalogue introuvable."));
+        if (reservation.getStatus() != ReservationStatus.READY_FOR_PICKUP) {
+            throw new IllegalArgumentException("Seule une réservation disponible peut être récupérée.");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        if (reservation.getPickupDeadline() != null && reservation.getPickupDeadline().isBefore(now)) {
+            reservation.setStatus(ReservationStatus.EXPIRED);
+            reservationRepository.save(reservation);
+            throw new IllegalArgumentException("Cette réservation a expiré.");
+        }
+        CatalogDocument document = findDocumentForUpdate(reservation.getCatalogDocument().getId());
+        if (loanRepository.existsByCatalogDocumentIdAndStatus(document.getId(), PhysicalLoanStatus.BORROWED)) {
+            throw new IllegalArgumentException("Ce catalogue est encore emprunté.");
+        }
+        UserEntity user = reservation.getUser();
+        CatalogDocumentLoan loan = new CatalogDocumentLoan();
+        loan.setUser(user);
+        loan.setCatalogDocument(document);
+        loan.setStatus(PhysicalLoanStatus.BORROWED);
+        loan.setBorrowedAt(now);
+        loan.setDueAt(now.plusDays(DEFAULT_LOAN_DAYS));
+        CatalogDocumentLoan saved = loanRepository.save(loan);
+
+        reservation.setStatus(ReservationStatus.PICKED_UP);
+        reservationRepository.save(reservation);
+
+        notificationService.create(user.getEmail(), "catalog_loan_created",
+                "Votre récupération du catalogue « " + document.getFileName() + " » est enregistrée comme prêt.");
+        return mapLoan(saved);
     }
 
     @Transactional(readOnly = true)

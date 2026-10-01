@@ -18,6 +18,10 @@ export const loanService = {
     return api.patch<Loan>(`/digital/loans/${id}/return`)
   },
 
+  cancelLoan(id: string) {
+    return api.patch<Loan>(`/digital/loans/${id}/cancel`)
+  },
+
   extendLoan(id: string, dueAt: string) {
     return api.patch<Loan>(`/digital/loans/${id}/extend`, { dueAt })
   },

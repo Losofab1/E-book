@@ -16,7 +16,7 @@ export type CatalogDocumentLoan = {
   catalogDocumentId: number
   catalogDocumentName: string
   contentType: string
-  status: 'BORROWED' | 'RETURNED'
+  status: 'BORROWED' | 'RETURNED' | 'CANCELED'
   borrowedAt: string
   dueAt: string
 }
@@ -28,7 +28,7 @@ export type CatalogDocumentReservation = {
   catalogDocumentId: number
   catalogDocumentName: string
   contentType: string
-  status: 'WAITING' | 'READY_FOR_PICKUP' | 'CANCELED' | 'EXPIRED'
+  status: 'WAITING' | 'READY_FOR_PICKUP' | 'CANCELED' | 'EXPIRED' | 'PICKED_UP'
   reservedAt: string
   readyAt: string | null
   pickupDeadline: string | null
@@ -50,6 +50,9 @@ export const catalogCirculationService = {
   returnLoan(id: number) {
     return api.patch<CatalogDocumentLoan>(`/catalog-circulation/loans/${id}/return`)
   },
+  cancelLoan(id: number) {
+    return api.patch<CatalogDocumentLoan>(`/catalog-circulation/loans/${id}/cancel`)
+  },
   extendLoan(id: number, dueAt: string) {
     return api.patch<CatalogDocumentLoan>(`/catalog-circulation/loans/${id}/extend`, { dueAt })
   },
@@ -64,6 +67,9 @@ export const catalogCirculationService = {
   },
   markReservationReady(id: number) {
     return api.patch<CatalogDocumentReservation>(`/catalog-circulation/reservations/${id}/ready`)
+  },
+  pickupReservation(id: number) {
+    return api.patch<CatalogDocumentLoan>(`/catalog-circulation/reservations/${id}/pickup`)
   },
   async download(id: number, fileName: string) {
     const blob = await catalogCirculationService.fetchFullBlob(id)

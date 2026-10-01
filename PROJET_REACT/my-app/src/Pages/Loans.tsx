@@ -275,6 +275,16 @@ const Loans = () => {
     }
   }
 
+  const cancelLoan = async (id: number) => {
+    try {
+      await loanService.cancelLoan(String(id))
+      setMessage('Prêt annulé.')
+      setRefreshKey(key => key + 1)
+    } catch {
+      setMessage('Annulation impossible.')
+    }
+  }
+
   const downloadDocument = async (id: number, name: string) => {
     try {
       await catalogCirculationService.download(id, name)
@@ -290,6 +300,16 @@ const Loans = () => {
       setRefreshKey(key => key + 1)
     } catch {
       setMessage('Retour impossible.')
+    }
+  }
+
+  const cancelDocumentLoan = async (id: number) => {
+    try {
+      await catalogCirculationService.cancelLoan(id)
+      setMessage('Prêt du document annulé.')
+      setRefreshKey(key => key + 1)
+    } catch {
+      setMessage('Annulation impossible.')
     }
   }
 
@@ -500,10 +520,10 @@ const Loans = () => {
                     ? <StatusBadge label="En cours" variant="warning" />
                     : item.status === 'RETURNED'
                       ? <StatusBadge label="Rendu" variant="success" />
-                      : <StatusBadge label={item.status} variant="neutral" />}</td>
-                  <td className="p-3"><div className="flex flex-wrap gap-3">{item.status === 'BORROWED' && <>{staff && <button type="button" onClick={() => void extendLoan(item)} className="inline-flex items-center gap-1 text-sm font-medium text-blue-800 hover:underline"><CalendarClock size={16} />Prolonger</button>}{staff
-                    ? <button type="button" onClick={() => void returnLoan(item.id)} className="inline-flex items-center gap-1 text-sm font-medium text-green-800 hover:underline"><RotateCcw size={16} />Retour</button>
-                    : <button type="button" onClick={() => void returnLoan(item.id)} className="inline-flex items-center gap-1 text-sm font-medium text-red-700 hover:underline"><RotateCcw size={16} />Annuler</button>}</>}</div></td>
+                      : item.status === 'CANCELED'
+                        ? <StatusBadge label="Annulé" variant="danger" />
+                        : <StatusBadge label={item.status} variant="neutral" />}</td>
+                  <td className="p-3"><div className="flex flex-wrap gap-3">{item.status === 'BORROWED' && <>{staff && <button type="button" onClick={() => void extendLoan(item)} className="inline-flex items-center gap-1 text-sm font-medium text-blue-800 hover:underline"><CalendarClock size={16} />Prolonger</button>}<button type="button" onClick={() => void returnLoan(item.id)} className="inline-flex items-center gap-1 text-sm font-medium text-green-800 hover:underline"><RotateCcw size={16} />Retour</button><button type="button" onClick={() => void cancelLoan(item.id)} className="inline-flex items-center gap-1 text-sm font-medium text-red-700 hover:underline"><RotateCcw size={16} />Annuler</button></>}</div></td>
                 </tr>
               ))}
               {!loadingLoans && !loansError && items.length === 0 && <tr><td colSpan={staff ? 5 : 4} className="p-8 text-center text-slate-600">Aucun prêt à afficher.</td></tr>}
@@ -529,11 +549,13 @@ const Loans = () => {
                 <td className="whitespace-nowrap p-3">{new Date(item.dueAt).toLocaleDateString('fr-FR')}</td>
                 <td className="p-3">{item.status === 'BORROWED'
                   ? <StatusBadge label="En cours" variant="warning" />
-                  : <StatusBadge label="Rendu" variant="success" />}</td>
+                  : item.status === 'RETURNED'
+                    ? <StatusBadge label="Rendu" variant="success" />
+                    : item.status === 'CANCELED'
+                      ? <StatusBadge label="Annulé" variant="danger" />
+                      : <StatusBadge label={item.status} variant="neutral" />}</td>
                 {staff && <td className="p-3">{item.status === 'BORROWED' && <button type="button" onClick={() => void downloadDocument(item.catalogDocumentId, item.catalogDocumentName)} className="font-medium text-green-800 hover:underline">Télécharger</button>}</td>}
-                <td className="p-3"><div className="flex flex-wrap gap-3">{item.status === 'BORROWED' && <>{staff && <button type="button" onClick={() => void extendDocumentLoan(item)} className="text-sm font-medium text-blue-800 hover:underline">Prolonger</button>}{staff
-                  ? <button type="button" onClick={() => void returnDocumentLoan(item.id)} className="text-sm font-medium text-green-800 hover:underline">Retour</button>
-                  : <button type="button" onClick={() => void returnDocumentLoan(item.id)} className="text-sm font-medium text-red-700 hover:underline">Annuler</button>}</>}</div></td>
+                <td className="p-3"><div className="flex flex-wrap gap-3">{item.status === 'BORROWED' && <>{staff && <button type="button" onClick={() => void extendDocumentLoan(item)} className="text-sm font-medium text-blue-800 hover:underline">Prolonger</button>}<button type="button" onClick={() => void returnDocumentLoan(item.id)} className="text-sm font-medium text-green-800 hover:underline">Retour</button><button type="button" onClick={() => void cancelDocumentLoan(item.id)} className="text-sm font-medium text-red-700 hover:underline">Annuler</button></>}</div></td>
               </tr>)}
               {!loadingDocumentLoans && !documentLoansError && documentLoans.length === 0 && <tr><td colSpan={staff ? 6 : 4} className="p-8 text-center text-slate-600">Aucun prêt de catalogue numérique.</td></tr>}
               {loadingDocumentLoans && <tr><td colSpan={staff ? 6 : 4} className="p-8 text-center text-slate-600">Chargement des prêts numériques…</td></tr>}

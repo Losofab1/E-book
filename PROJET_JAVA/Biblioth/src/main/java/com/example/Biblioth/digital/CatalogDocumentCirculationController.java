@@ -65,6 +65,14 @@ public class CatalogDocumentCirculationController {
         return ResponseEntity.ok(circulationService.returnLoan(loanId));
     }
 
+    @PatchMapping("/loans/{loanId}/cancel")
+    public ResponseEntity<CatalogDocumentLoanResponse> cancelLoan(@PathVariable Long loanId, Authentication authentication) {
+        if (!isStaff(authentication) && !circulationService.ownsLoan(loanId, authentication.getName())) {
+            throw new AccessDeniedException("Vous ne pouvez annuler que votre propre prêt.");
+        }
+        return ResponseEntity.ok(circulationService.cancelLoan(loanId));
+    }
+
     @GetMapping("/reservations")
     public List<CatalogDocumentReservationResponse> reservations(Authentication authentication) {
         Long userId = isStaff(authentication) ? null : circulationService.getUserId(authentication.getName());
@@ -94,6 +102,15 @@ public class CatalogDocumentCirculationController {
             throw new AccessDeniedException("Vous ne pouvez annuler que votre propre réservation.");
         }
         return ResponseEntity.ok(circulationService.cancelReservation(reservationId));
+    }
+
+    @PatchMapping("/reservations/{reservationId}/pickup")
+    public ResponseEntity<CatalogDocumentLoanResponse> pickupReservation(
+            @PathVariable Long reservationId, Authentication authentication) {
+        if (!isStaff(authentication) && !circulationService.ownsReservation(reservationId, authentication.getName())) {
+            throw new AccessDeniedException("Vous ne pouvez récupérer que votre propre réservation.");
+        }
+        return ResponseEntity.ok(circulationService.pickupReservation(reservationId));
     }
 
     private boolean isStaff(Authentication authentication) {

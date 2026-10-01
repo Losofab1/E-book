@@ -58,6 +58,14 @@ public class DigitalAccessController {
         return ResponseEntity.ok(digitalAccessService.returnLoan(loanId));
     }
 
+    @PatchMapping("/loans/{loanId}/cancel")
+    public ResponseEntity<LoanResponse> cancelLoan(@PathVariable Long loanId, Authentication authentication) {
+        if (!isStaff(authentication) && !digitalAccessService.ownsLoan(loanId, authentication.getName())) {
+            throw new AccessDeniedException("Vous ne pouvez annuler que votre propre prêt.");
+        }
+        return ResponseEntity.ok(digitalAccessService.cancelLoan(loanId));
+    }
+
     @GetMapping("/reservations")
     public ResponseEntity<List<ReservationResponse>> reservations(Authentication authentication) {
         return ResponseEntity.ok(isStaff(authentication) ? digitalAccessService.getAllReservations() : digitalAccessService.getReservationsForEmail(authentication.getName()));
@@ -83,6 +91,14 @@ public class DigitalAccessController {
             throw new AccessDeniedException("Vous ne pouvez annuler que votre propre réservation.");
         }
         return ResponseEntity.ok(digitalAccessService.cancelReservation(reservationId));
+    }
+
+    @PatchMapping("/reservations/{reservationId}/pickup")
+    public ResponseEntity<LoanResponse> pickupReservation(@PathVariable Long reservationId, Authentication authentication) {
+        if (!isStaff(authentication) && !digitalAccessService.ownsReservation(reservationId, authentication.getName())) {
+            throw new AccessDeniedException("Vous ne pouvez récupérer que votre propre réservation.");
+        }
+        return ResponseEntity.ok(digitalAccessService.pickupReservation(reservationId));
     }
 
     private boolean isStaff(Authentication authentication) {

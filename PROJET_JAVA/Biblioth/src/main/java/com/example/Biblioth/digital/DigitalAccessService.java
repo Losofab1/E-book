@@ -175,6 +175,21 @@ public class DigitalAccessService {
     }
 
     @Transactional
+    public LoanResponse cancelLoan(Long loanId) {
+        PhysicalLoan loan = physicalLoanRepository.findById(loanId)
+                .orElseThrow(() -> new ResourceNotFoundException("Prêt introuvable."));
+        if (loan.getStatus() != PhysicalLoanStatus.BORROWED) {
+            throw new IllegalArgumentException("Ce prêt est déjà clôturé.");
+        }
+        loan.setStatus(PhysicalLoanStatus.CANCELED);
+        loan.setReturnedAt(LocalDateTime.now());
+        loan.getBook().setAvailableCopies(loan.getBook().getAvailableCopies() + 1);
+        bookRepository.save(loan.getBook());
+        notificationService.create(loan.getUser().getEmail(), "loan_canceled", "L'annulation du prêt de « " + loan.getBook().getTitle() + " » est enregistrée.");
+        return mapLoan(physicalLoanRepository.save(loan));
+    }
+
+    @Transactional
     public ReservationResponse createReservation(ReservationRequest request) {
         LocalDateTime now = LocalDateTime.now();
         Reservation reservation = new Reservation();
@@ -227,6 +242,46 @@ public class DigitalAccessService {
         reservation.setStatus(ReservationStatus.CANCELED);
         reservation.setCanceledAt(LocalDateTime.now());
         return mapReservation(reservationRepository.save(reservation));
+    }
+
+    @Transactional
+    public LoanResponse pickupReservation(Long reservationId) {
+        LocalDateTime now = LocalDateTime.now();
+        expireOutdatedWindows(now);
+        Reservation reservation = reservationRepository.findById(reservationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Réservation introuvable."));
+        if (reservation.getStatus() != ReservationStatus.READY_FOR_PICKUP) {
+            throw new IllegalArgumentException("Seule une réservation disponible peut être récupérée.");
+        }
+        if (reservation.getPickupDeadline() != null && reservation.getPickupDeadline().isBefore(now)) {
+            reservation.setStatus(ReservationStatus.EXPIRED);
+            reservationRepository.save(reservation);
+            throw new IllegalArgumentException("Cette réservation a expiré.");
+        }
+        BookEntity book = reservation.getBook();
+        if (book.getAvailableCopies() == null || book.getAvailableCopies() < 1) {
+            throw new IllegalArgumentException("Aucun exemplaire disponible pour cette récupération.");
+        }
+
+        PhysicalLoan loan = new PhysicalLoan();
+        loan.setUser(reservation.getUser());
+        loan.setBook(book);
+        loan.setStatus(PhysicalLoanStatus.BORROWED);
+        loan.setBorrowedAt(now);
+        loan.setDueAt(now.plusDays(DEFAULT_LOAN_DAYS));
+
+        book.setAvailableCopies(book.getAvailableCopies() - 1);
+        bookRepository.save(book);
+
+        PhysicalLoan savedLoan = physicalLoanRepository.save(loan);
+        ensureToken(reservation.getUser(), book, DigitalAccessSourceType.LOAN, savedLoan.getId(), now, savedLoan.getDueAt());
+
+        reservation.setStatus(ReservationStatus.PICKED_UP);
+        reservationRepository.save(reservation);
+
+        notificationService.create(reservation.getUser().getEmail(), "loan_created",
+                "Votre récupération pour « " + book.getTitle() + " » est enregistrée comme prêt.");
+        return mapLoan(savedLoan);
     }
 
     @Transactional(readOnly = true)

@@ -17,6 +17,7 @@ const reservationStatus = (status: string): [string, BadgeVariant] => {
   switch (status) {
     case 'WAITING': return ['En attente', 'warning']
     case 'READY_FOR_PICKUP': return ['Disponible', 'success']
+    case 'PICKED_UP': return ['Récupéré — en prêt', 'success']
     case 'CANCELED': return ['Annulée', 'danger']
     case 'EXPIRED': return ['Expirée', 'neutral']
     default: return [status, 'neutral']
@@ -55,6 +56,10 @@ const Reservations = () => {
     catch (error: any) { setMessage(error.response?.data?.message ?? 'Réservation impossible.') }
   }
   const ready = async (id: number) => { try { await reservationService.ready(id); setMessage('Réservation disponible pour retrait.'); await reload() } catch { setMessage('Opération impossible.') } }
+  const pickupBook = async (id: number) => {
+    try { await reservationService.pickup(id); setMessage('Récupération enregistrée — prêt de l’ouvrage créé. Voir page Prêts.'); await reload() }
+    catch (error: any) { setMessage(error.response?.data?.message ?? 'Récupération impossible.') }
+  }
   const cancelBook = async (id: number) => {
     try { await reservationService.cancel(String(id)); setMessage('Réservation annulée.'); await reload() }
     catch { setMessage('Annulation impossible.') }
@@ -72,6 +77,10 @@ const Reservations = () => {
   const readyDocument = async (id: number) => {
     try { await catalogCirculationService.markReservationReady(id); setMessage('Catalogue disponible pendant 48 heures.'); await reload() }
     catch (error: any) { setMessage(error.response?.data?.message ?? 'Le catalogue ne peut pas encore être rendu disponible.') }
+  }
+  const pickupDocument = async (id: number) => {
+    try { await catalogCirculationService.pickupReservation(id); setMessage('Récupération enregistrée — prêt du catalogue créé. Voir page Prêts.'); await reload() }
+    catch (error: any) { setMessage(error.response?.data?.message ?? 'Récupération impossible.') }
   }
   const cancelDocument = async (id: number) => {
     try { await catalogCirculationService.cancelReservation(id); setMessage('Réservation annulée.'); await reload() }
@@ -95,8 +104,9 @@ const Reservations = () => {
       render: (item) => (
         <div className="flex flex-wrap gap-3">
           {staff && item.status === 'WAITING' && <button type="button" onClick={() => void readyDocument(item.id)} className="text-sm font-medium text-primary-800 hover:underline">Rendre disponible</button>}
+          {staff && item.status === 'READY_FOR_PICKUP' && <button type="button" onClick={() => void pickupDocument(item.id)} className="text-sm font-medium text-green-800 hover:underline">Confirmer récupération (→ prêt)</button>}
           {!staff && item.status === 'WAITING' && item.userId === user?.id && <button type="button" onClick={() => void cancelDocument(item.id)} className="text-sm font-medium text-red-700 hover:underline">Annuler</button>}
-          {!staff && item.status === 'READY_FOR_PICKUP' && item.userId === user?.id && <button type="button" onClick={() => void cancelDocument(item.id)} className="text-sm font-medium text-red-700 hover:underline">Annuler</button>}
+          {!staff && item.status === 'READY_FOR_PICKUP' && item.userId === user?.id && <><button type="button" onClick={() => void pickupDocument(item.id)} className="text-sm font-medium text-green-800 hover:underline">Récupérer (→ prêt)</button><button type="button" onClick={() => void cancelDocument(item.id)} className="text-sm font-medium text-red-700 hover:underline">Annuler</button></>}
         </div>
       ),
     },
@@ -119,7 +129,9 @@ const Reservations = () => {
       render: (item) => (
         <div className="flex flex-wrap gap-3">
           {staff && item.status === 'WAITING' && <button type="button" onClick={() => void ready(item.id)} className="text-sm font-medium text-primary-800 hover:underline">Rendre disponible</button>}
-          {!staff && (item.status === 'WAITING' || item.status === 'READY_FOR_PICKUP') && item.userId === user?.id && <button type="button" onClick={() => void cancelBook(item.id)} className="text-sm font-medium text-red-700 hover:underline">Annuler</button>}
+          {staff && item.status === 'READY_FOR_PICKUP' && <button type="button" onClick={() => void pickupBook(item.id)} className="text-sm font-medium text-green-800 hover:underline">Confirmer récupération (→ prêt)</button>}
+          {!staff && item.status === 'WAITING' && item.userId === user?.id && <button type="button" onClick={() => void cancelBook(item.id)} className="text-sm font-medium text-red-700 hover:underline">Annuler</button>}
+          {!staff && item.status === 'READY_FOR_PICKUP' && item.userId === user?.id && <><button type="button" onClick={() => void pickupBook(item.id)} className="text-sm font-medium text-green-800 hover:underline">Récupérer (→ prêt)</button><button type="button" onClick={() => void cancelBook(item.id)} className="text-sm font-medium text-red-700 hover:underline">Annuler</button></>}
         </div>
       ),
     },

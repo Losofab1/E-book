@@ -17,4 +17,8 @@ export const reservationService = {
   ready(id: number) {
     return api.patch(`/digital/reservations/${id}/ready`)
   },
+
+  pickup(id: number) {
+    return api.patch(`/digital/reservations/${id}/pickup`)
+  },
 }
