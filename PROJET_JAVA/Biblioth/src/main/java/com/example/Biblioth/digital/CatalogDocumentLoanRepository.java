@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 
 public interface CatalogDocumentLoanRepository extends JpaRepository<CatalogDocumentLoan, Long> {
     boolean existsByCatalogDocumentIdAndStatus(Long catalogDocumentId, PhysicalLoanStatus status);
+    boolean existsByUserIdAndCatalogDocumentIdAndStatus(Long userId, Long catalogDocumentId, PhysicalLoanStatus status);
     long countByCatalogDocumentIdAndStatus(Long catalogDocumentId, PhysicalLoanStatus status);
     void deleteByCatalogDocumentId(Long catalogDocumentId);
     Optional<CatalogDocumentLoan> findFirstByCatalogDocumentIdAndStatusOrderByDueAtDesc(Long catalogDocumentId, PhysicalLoanStatus status);

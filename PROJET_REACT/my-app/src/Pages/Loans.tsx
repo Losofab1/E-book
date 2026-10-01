@@ -8,6 +8,7 @@ import { useAuth } from '../AuthContext'
 import PageHeader from '../Components/ui/PageHeader'
 import Alert from '../Components/ui/Alert'
 import StatusBadge from '../Components/ui/StatusBadge'
+import ShowMoreButton from '../Components/ui/ShowMoreButton'
 import DataTable, { type TableColumn } from '../Components/ui/DataTable'
 
 type Book = { id: number; title: string; author?: string; category?: string; availableCopies: number; active?: boolean }
@@ -40,6 +41,14 @@ const Loans = () => {
   const [loadingUsers, setLoadingUsers] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [showAllLoans, setShowAllLoans] = useState(false)
+  const [showAllDocumentLoans, setShowAllDocumentLoans] = useState(false)
+  const visibleItems = showAllLoans ? items : items.slice(0, 10)
+  const visibleDocumentLoans = showAllDocumentLoans ? documentLoans : documentLoans.slice(0, 10)
+  const loanTargetUserId = staff ? selectedDocumentUser : String(user?.id ?? '')
+  const hasActiveDocumentLoan = (catalogDocumentId: number) =>
+    loanTargetUserId !== '' && documentLoans.some((loan) =>
+      loan.catalogDocumentId === catalogDocumentId && loan.status === 'BORROWED' && String(loan.userId) === loanTargetUserId)
 
   useEffect(() => {
     let cancelled = false
@@ -207,25 +216,29 @@ const Loans = () => {
     {
       key: 'status',
       label: 'Statut',
-      render: (document) => (document.available
-        ? <StatusBadge label="Disponible" variant="success" />
-        : <StatusBadge label="Emprunté" variant="warning" />),
+      render: (document) => (hasActiveDocumentLoan(document.id)
+        ? <StatusBadge label="Déjà emprunté" variant="info" />
+        : (document.available
+          ? <StatusBadge label="Disponible" variant="success" />
+          : <StatusBadge label="Emprunté" variant="warning" />)),
     },
     {
       key: 'action',
       label: 'Sélection',
       render: (document) => {
         const selected = selectedDocument === String(document.id)
+        const alreadyBorrowed = hasActiveDocumentLoan(document.id)
+        const disabled = !document.available || alreadyBorrowed
         return (
           <button
             type="button"
             aria-pressed={selected}
-            disabled={!document.available}
-            title={document.available ? 'Sélectionner ce catalogue' : 'Catalogue actuellement emprunté'}
+            disabled={disabled}
+            title={alreadyBorrowed ? 'Cet usager a déjà ce catalogue en prêt' : (document.available ? 'Sélectionner ce catalogue' : 'Catalogue actuellement emprunté')}
             onClick={() => setSelectedDocument(selected ? '' : String(document.id))}
             className={selected ? 'btn-primary px-3 py-1.5 text-sm' : 'btn-outline px-3 py-1.5 text-sm'}
           >
-            {selected ? 'Sélectionné' : 'Sélectionner'}
+            {selected ? 'Sélectionné' : (alreadyBorrowed ? 'Déjà emprunté' : 'Sélectionner')}
           </button>
         )
       },
@@ -517,7 +530,7 @@ const Loans = () => {
           <table className="min-w-full text-left">
             <thead className="bg-slate-100 text-sm text-slate-700"><tr><th className="p-3">Ouvrage</th>{staff && <th className="p-3">Usager</th>}<th className="p-3">Échéance</th><th className="p-3">Statut</th><th className="p-3">Actions</th></tr></thead>
             <tbody>
-              {!loadingLoans && !loansError && items.map(item => (
+              {!loadingLoans && !loansError && visibleItems.map(item => (
                 <tr key={item.id} className="border-t border-slate-200">
                   <td className="p-3 font-medium">{books.find(book => book.id === item.bookId)?.title ?? `Livre #${item.bookId}`}</td>
                   {staff && <td className="p-3">{users.find(person => person.id === item.userId)?.name ?? `Usager #${item.userId}`}</td>}
@@ -536,6 +549,9 @@ const Loans = () => {
               {loadingLoans && <tr><td colSpan={staff ? 5 : 4} className="p-8 text-center text-slate-600">Chargement des prêts…</td></tr>}
             </tbody>
           </table>
+          {!loadingLoans && !loansError && items.length > 10 && (
+            <ShowMoreButton showAll={showAllLoans} onToggle={() => setShowAllLoans((current) => !current)} />
+          )}
         </div>
       </section>
 
@@ -549,7 +565,7 @@ const Loans = () => {
           <table className="min-w-full text-left">
             <thead className="bg-slate-100 text-sm text-slate-700"><tr><th className="p-3">Document</th>{staff && <th className="p-3">Usager</th>}<th className="p-3">Échéance</th><th className="p-3">Statut</th>{staff && <th className="p-3">Fichier</th>}<th className="p-3">Actions</th></tr></thead>
             <tbody>
-              {!loadingDocumentLoans && !documentLoansError && documentLoans.map(item => <tr key={item.id} className="border-t border-slate-200">
+              {!loadingDocumentLoans && !documentLoansError && visibleDocumentLoans.map(item => <tr key={item.id} className="border-t border-slate-200">
                 <td className="p-3 font-medium">{item.catalogDocumentName}</td>
                 {staff && <td className="p-3">{item.userName}</td>}
                 <td className="whitespace-nowrap p-3">{new Date(item.dueAt).toLocaleDateString('fr-FR')}</td>
@@ -567,6 +583,9 @@ const Loans = () => {
               {loadingDocumentLoans && <tr><td colSpan={staff ? 6 : 4} className="p-8 text-center text-slate-600">Chargement des prêts numériques…</td></tr>}
             </tbody>
           </table>
+          {!loadingDocumentLoans && !documentLoansError && documentLoans.length > 10 && (
+            <ShowMoreButton showAll={showAllDocumentLoans} onToggle={() => setShowAllDocumentLoans((current) => !current)} />
+          )}
         </div>
       </section>
     </section>

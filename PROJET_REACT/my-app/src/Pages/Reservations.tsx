@@ -7,6 +7,7 @@ import DataTable, { type TableColumn } from '../Components/ui/DataTable'
 import PageHeader from '../Components/ui/PageHeader'
 import Alert from '../Components/ui/Alert'
 import StatusBadge from '../Components/ui/StatusBadge'
+import ShowMoreButton from '../Components/ui/ShowMoreButton'
 
 type Book = { id: number; title: string }
 type Reservation = { id: number; bookId: number; userId: number; status: string; reservedAt: string }
@@ -30,21 +31,31 @@ const Reservations = () => {
   const [items, setItems] = useState<Reservation[]>([])
   const [documents, setDocuments] = useState<CatalogDocument[]>([])
   const [documentReservations, setDocumentReservations] = useState<CatalogDocumentReservation[]>([])
+  const [borrowedDocumentIds, setBorrowedDocumentIds] = useState<Set<number>>(new Set())
+  const [showAllDocuments, setShowAllDocuments] = useState(false)
   const [bookId, setBookId] = useState('')
   const [documentId, setDocumentId] = useState<number | null>(null)
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const staff = user?.role === 'admin' || user?.role === 'bibliothecaire'
+  const visibleDocuments = showAllDocuments ? documents : documents.slice(0, 10)
   const reload = async () => {
     setLoading(true)
-    const [bookResult, reservationResult, documentsResult, documentReservationsResult] = await Promise.allSettled([
-      bookService.getAll(), reservationService.getAll(), catalogCirculationService.getDocuments(), catalogCirculationService.getReservations(),
+    const [bookResult, reservationResult, documentsResult, documentReservationsResult, documentLoansResult] = await Promise.allSettled([
+      bookService.getAll(), reservationService.getAll(), catalogCirculationService.getDocuments(), catalogCirculationService.getReservations(), catalogCirculationService.getLoans(),
     ])
     if (bookResult.status === 'fulfilled') setBooks(bookResult.value.data as Book[])
     if (reservationResult.status === 'fulfilled') setItems(reservationResult.value.data as Reservation[])
     if (documentsResult.status === 'fulfilled') setDocuments(documentsResult.value.data)
     if (documentReservationsResult.status === 'fulfilled') setDocumentReservations(documentReservationsResult.value.data)
-    if ([bookResult, reservationResult, documentsResult, documentReservationsResult].some(result => result.status === 'rejected')) {
+    if (documentLoansResult.status === 'fulfilled' && Array.isArray(documentLoansResult.value.data)) {
+      setBorrowedDocumentIds(new Set(
+        documentLoansResult.value.data
+          .filter((loan) => loan.status === 'BORROWED' && loan.userId === user?.id)
+          .map((loan) => loan.catalogDocumentId),
+      ))
+    }
+    if ([bookResult, reservationResult, documentsResult, documentReservationsResult, documentLoansResult].some(result => result.status === 'rejected')) {
       setMessage('Certaines réservations ou certains catalogues sont momentanément indisponibles.')
     }
     setLoading(false)
@@ -151,14 +162,18 @@ const Reservations = () => {
       {loading && <p className="mt-4 text-sm text-slate-600">Chargement des catalogues numériques…</p>}
       {!loading && documents.length === 0 && <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Aucun document PDF/CSV importé.</p>}
       <div className="mt-4 divide-y divide-slate-200">
-        {documents.map(document => {
+        {visibleDocuments.map(document => {
           const existingReservation = documentReservations.find(item => item.userId === user?.id && item.catalogDocumentId === document.id && ['WAITING', 'READY_FOR_PICKUP'].includes(item.status))
+          const alreadyBorrowed = borrowedDocumentIds.has(document.id)
           return <div key={document.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-            <div className="min-w-0"><p className="truncate font-semibold">{document.name}</p><p className="mt-1 text-sm text-slate-600">{document.contentType.includes('pdf') ? 'PDF' : 'CSV'} · {document.totalCopies ?? 10} ex. · {document.availableCopies ?? (document.available ? document.totalCopies ?? 10 : 0)} disponible(s) · {document.available ? 'Disponible' : document.dueAt ? `Indisponible jusqu’au ${new Date(document.dueAt).toLocaleDateString('fr-FR')}` : 'Réservation prioritaire en cours'} · {document.waitingReservations} réservation(s) en attente</p></div>
-            {!staff && <button type="button" disabled={document.available || documentId === document.id || Boolean(existingReservation)} onClick={() => void reserveDocument(document.id)} className="btn-outline shrink-0 px-3 py-2 text-sm disabled:cursor-not-allowed">{existingReservation ? existingReservation.status === 'READY_FOR_PICKUP' ? 'Disponible pour vous' : 'Déjà réservé' : document.available ? 'Disponible dans Prêts' : documentId === document.id ? 'Envoi…' : 'Réserver'}</button>}
+            <div className="min-w-0"><p className="truncate font-semibold">{document.name}</p><p className="mt-1 text-sm text-slate-600">{document.contentType.includes('pdf') ? 'PDF' : 'CSV'} · {document.totalCopies ?? 10} ex. · {document.availableCopies ?? (document.available ? document.totalCopies ?? 10 : 0)} disponible(s) · {alreadyBorrowed ? 'Déjà en prêt pour vous' : document.available ? 'Disponible' : document.dueAt ? `Indisponible jusqu’au ${new Date(document.dueAt).toLocaleDateString('fr-FR')}` : 'Réservation prioritaire en cours'} · {document.waitingReservations} réservation(s) en attente</p></div>
+            {!staff && <button type="button" disabled={document.available || alreadyBorrowed || documentId === document.id || Boolean(existingReservation)} onClick={() => void reserveDocument(document.id)} title={alreadyBorrowed ? 'Vous avez déjà ce catalogue en prêt' : undefined} className="btn-outline shrink-0 px-3 py-2 text-sm disabled:cursor-not-allowed">{alreadyBorrowed ? 'Déjà emprunté' : existingReservation ? existingReservation.status === 'READY_FOR_PICKUP' ? 'Disponible pour vous' : 'Déjà réservé' : document.available ? 'Disponible dans Prêts' : documentId === document.id ? 'Envoi…' : 'Réserver'}</button>}
           </div>
         })}
       </div>
+      {documents.length > 10 && (
+        <ShowMoreButton showAll={showAllDocuments} onToggle={() => setShowAllDocuments((current) => !current)} />
+      )}
     </section>
 
     <section className="mt-6" aria-labelledby="digital-reservation-history">

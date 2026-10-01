@@ -9,6 +9,7 @@ import { useAuth } from '../AuthContext'
 import Alert from './ui/Alert'
 import StatusBadge from './ui/StatusBadge'
 import ReaderModal from './ui/ReaderModal'
+import ShowMoreButton from './ui/ShowMoreButton'
 import CatalogCsvReader from './ui/CatalogCsvReader'
 
 const CatalogPdfReader = lazy(() => import('./ui/CatalogPdfReader'))
@@ -42,11 +43,10 @@ const Consul = () => {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [bookPage, setBookPage] = useState(0)
-  const [docPage, setDocPage] = useState(0)
+  const [showAllBooks, setShowAllBooks] = useState(false)
+  const [showAllDocuments, setShowAllDocuments] = useState(false)
   const [reader, setReader] = useState<Reader>({ kind: 'closed' })
-  const BOOK_PAGE_SIZE = 12
-  const DOC_PAGE_SIZE = 10
+  const PREVIEW_SIZE = 10
 
   useEffect(() => {
     let cancelled = false
@@ -81,22 +81,14 @@ const Consul = () => {
     if (!term) return documents
     return documents.filter((document) => (document.name ?? '').toLocaleLowerCase('fr').includes(term))
   }, [documents, term])
-  const pagedBooks = useMemo(
-    () => filteredBooks.slice(bookPage * BOOK_PAGE_SIZE, bookPage * BOOK_PAGE_SIZE + BOOK_PAGE_SIZE),
-    [filteredBooks, bookPage],
-  )
-  const pagedDocuments = useMemo(
-    () => filteredDocuments.slice(docPage * DOC_PAGE_SIZE, docPage * DOC_PAGE_SIZE + DOC_PAGE_SIZE),
-    [filteredDocuments, docPage],
-  )
-  const bookPages = Math.max(1, Math.ceil(filteredBooks.length / BOOK_PAGE_SIZE))
-  const docPages = Math.max(1, Math.ceil(filteredDocuments.length / DOC_PAGE_SIZE))
+  const visibleBooks = showAllBooks ? filteredBooks : filteredBooks.slice(0, PREVIEW_SIZE)
+  const visibleDocuments = showAllDocuments ? filteredDocuments : filteredDocuments.slice(0, PREVIEW_SIZE)
 
   useEffect(() => {
     const t = setTimeout(() => {
       setDebouncedSearch(search)
-      setBookPage(0)
-      setDocPage(0)
+      setShowAllBooks(false)
+      setShowAllDocuments(false)
     }, 250)
     return () => clearTimeout(t)
   }, [search])
@@ -217,7 +209,7 @@ const Consul = () => {
           ) : (
             <>
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {pagedBooks.map((book) => (
+              {visibleBooks.map((book) => (
                 <article key={book.id} className="rounded-2xl border border-green-100 bg-white p-6 shadow-md transition hover:-translate-y-1 hover:shadow-lg">
                   <div className="flex items-start justify-between gap-4">
                     <BookOpenText className="shrink-0 text-primary-700" size={28} strokeWidth={1.5} />
@@ -237,12 +229,8 @@ const Consul = () => {
                 </article>
               ))}
             </div>
-            {bookPages > 1 && (
-              <div className="mt-5 flex items-center justify-center gap-3 text-sm">
-                <button type="button" disabled={bookPage === 0} onClick={() => setBookPage((p) => Math.max(0, p - 1))} className="btn-outline px-3 py-1.5 disabled:opacity-40">Précédent</button>
-                <span>Page {bookPage + 1} / {bookPages}</span>
-                <button type="button" disabled={bookPage + 1 >= bookPages} onClick={() => setBookPage((p) => p + 1)} className="btn-outline px-3 py-1.5 disabled:opacity-40">Suivant</button>
-              </div>
+            {filteredBooks.length > PREVIEW_SIZE && (
+              <ShowMoreButton showAll={showAllBooks} onToggle={() => setShowAllBooks((current) => !current)} />
             )}
             </>
           )}
@@ -254,7 +242,7 @@ const Consul = () => {
             <>
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md">
               <ul className="divide-y divide-slate-200">
-                {pagedDocuments.map((document) => (
+                {visibleDocuments.map((document) => (
                   <li key={document.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4 sm:p-5">
                     <div className="flex min-w-0 items-start gap-3">
                       <FileText className="mt-0.5 shrink-0 text-primary-700" size={26} strokeWidth={1.5} />
@@ -282,14 +270,10 @@ const Consul = () => {
                   </li>
                 ))}
               </ul>
+              {filteredDocuments.length > PREVIEW_SIZE && (
+                <ShowMoreButton showAll={showAllDocuments} onToggle={() => setShowAllDocuments((current) => !current)} />
+              )}
             </div>
-            {docPages > 1 && (
-              <div className="mt-5 flex items-center justify-center gap-3 text-sm">
-                <button type="button" disabled={docPage === 0} onClick={() => setDocPage((p) => Math.max(0, p - 1))} className="btn-outline px-3 py-1.5 disabled:opacity-40">Précédent</button>
-                <span>Page {docPage + 1} / {docPages}</span>
-                <button type="button" disabled={docPage + 1 >= docPages} onClick={() => setDocPage((p) => p + 1)} className="btn-outline px-3 py-1.5 disabled:opacity-40">Suivant</button>
-              </div>
-            )}
             </>
           )}
         </>

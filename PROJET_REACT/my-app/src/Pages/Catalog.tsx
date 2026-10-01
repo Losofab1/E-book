@@ -31,9 +31,6 @@ const Catalog = () => {
   const [uploading, setUploading] = useState(false)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [docPage, setDocPage] = useState(0)
-  const [bookPage, setBookPage] = useState(0)
-  const PAGE_SIZE = 20
   const canImport = user?.role === 'admin' || user?.role === 'bibliothecaire'
   const isAdmin = user?.role === 'admin'
   const MAX_SIZE = 25 * 1024 * 1024
@@ -109,8 +106,6 @@ const Catalog = () => {
   useEffect(() => {
     const t = setTimeout(() => {
       setDebouncedSearch(search.trim().toLocaleLowerCase('fr'))
-      setDocPage(0)
-      setBookPage(0)
     }, 250)
     return () => clearTimeout(t)
   }, [search])
@@ -125,16 +120,6 @@ const Catalog = () => {
       [b.title, b.author, b.isbn, b.category].some((v) => (v ?? '').toLocaleLowerCase('fr').includes(debouncedSearch)),
     )
   }, [books, debouncedSearch])
-  const pagedDocuments = useMemo(
-    () => filteredDocuments.slice(docPage * PAGE_SIZE, docPage * PAGE_SIZE + PAGE_SIZE),
-    [filteredDocuments, docPage],
-  )
-  const pagedBooks = useMemo(
-    () => filteredBooks.slice(bookPage * PAGE_SIZE, bookPage * PAGE_SIZE + PAGE_SIZE),
-    [filteredBooks, bookPage],
-  )
-  const docPages = Math.max(1, Math.ceil(filteredDocuments.length / PAGE_SIZE))
-  const bookPages = Math.max(1, Math.ceil(filteredBooks.length / PAGE_SIZE))
 
   const upload = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? [])
@@ -208,27 +193,13 @@ const Catalog = () => {
     <div className="table-card">
       {loadingDocs ? <p className="p-4 text-slate-600">Chargement des documents…</p> : <DataTable
         columns={documentColumns}
-        data={pagedDocuments}
+        data={filteredDocuments}
         emptyMessage="Aucun document importé."
         rowKey={(document) => String(document.id)}
       />}
-      {docPages > 1 && (
-        <div className="flex items-center justify-center gap-3 border-t border-slate-200 bg-white px-6 py-3 text-sm">
-          <button type="button" disabled={docPage === 0} onClick={() => setDocPage((p) => Math.max(0, p - 1))} className="btn-outline px-3 py-1 disabled:opacity-40">Précédent</button>
-          <span>Page {docPage + 1} / {docPages}</span>
-          <button type="button" disabled={docPage + 1 >= docPages} onClick={() => setDocPage((p) => p + 1)} className="btn-outline px-3 py-1 disabled:opacity-40">Suivant</button>
-        </div>
-      )}
     </div>
     <h2 className="mb-3 mt-6 text-xl font-bold">Ouvrages ({filteredBooks.length})</h2>
-    <div className="table-card">{loadingBooks ? <p className="p-4 text-slate-600">Chargement des ouvrages…</p> : <DataTable columns={bookColumns} data={pagedBooks} emptyMessage="Aucun ouvrage au catalogue." rowKey={(book) => String(book.id)} />}
-      {bookPages > 1 && (
-        <div className="flex items-center justify-center gap-3 border-t border-slate-200 bg-white px-6 py-3 text-sm">
-          <button type="button" disabled={bookPage === 0} onClick={() => setBookPage((p) => Math.max(0, p - 1))} className="btn-outline px-3 py-1 disabled:opacity-40">Précédent</button>
-          <span>Page {bookPage + 1} / {bookPages}</span>
-          <button type="button" disabled={bookPage + 1 >= bookPages} onClick={() => setBookPage((p) => p + 1)} className="btn-outline px-3 py-1 disabled:opacity-40">Suivant</button>
-        </div>
-      )}
+    <div className="table-card">{loadingBooks ? <p className="p-4 text-slate-600">Chargement des ouvrages…</p> : <DataTable columns={bookColumns} data={filteredBooks} emptyMessage="Aucun ouvrage au catalogue." rowKey={(book) => String(book.id)} />}
     </div>
   </section>
 }
