@@ -37,9 +37,9 @@ public class CatalogController {
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<Map<String, Object>> upload(@RequestParam("file") MultipartFile file, Authentication authentication) throws Exception {
+    public ResponseEntity<Map<String, Object>> upload(@RequestParam("file") MultipartFile file, Authentication authentication) {
         validateFile(file);
-        String name = file.getOriginalFilename() == null ? "catalogue" : file.getOriginalFilename();
+        String name = file.getOriginalFilename() == null || file.getOriginalFilename().isBlank() ? "catalogue" : file.getOriginalFilename();
         String lower = name.toLowerCase();
         int imported = lower.endsWith(".csv") ? bookService.importCsv(file) : 0;
         CatalogDocument saved = storeDocument(file, name, lower, authentication);
@@ -47,12 +47,12 @@ public class CatalogController {
     }
 
     @PostMapping(value = "/batch", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<Map<String, Object>> uploadBatch(@RequestParam("files") java.util.List<MultipartFile> files, Authentication authentication) throws Exception {
+    public ResponseEntity<Map<String, Object>> uploadBatch(@RequestParam("files") java.util.List<MultipartFile> files, Authentication authentication) {
         if (files == null || files.isEmpty()) throw new IllegalArgumentException("Au moins un fichier est obligatoire.");
         java.util.List<Map<String, Object>> results = new java.util.ArrayList<>();
         int totalImportedBooks = 0;
         for (MultipartFile file : files) {
-            String name = file.getOriginalFilename() == null ? "catalogue" : file.getOriginalFilename();
+            String name = file == null || file.getOriginalFilename() == null || file.getOriginalFilename().isBlank() ? "catalogue" : file.getOriginalFilename();
             try {
                 validateFile(file);
                 String lower = name.toLowerCase();
@@ -61,7 +61,9 @@ public class CatalogController {
                 totalImportedBooks += imported;
                 results.add(Map.of("name", name, "id", saved.getId(), "importedCount", imported, "ok", true));
             } catch (IllegalArgumentException exception) {
-                results.add(Map.of("name", name, "ok", false, "error", exception.getMessage()));
+                results.add(Map.of("name", name, "ok", false, "error", String.valueOf(exception.getMessage())));
+            } catch (Exception exception) {
+                results.add(Map.of("name", name, "ok", false, "error", "Lecture impossible pour ce fichier."));
             }
         }
         return ResponseEntity.ok(Map.of(
@@ -78,12 +80,17 @@ public class CatalogController {
         if (!lower.endsWith(".csv") && !lower.endsWith(".pdf")) throw new IllegalArgumentException("Seuls les formats CSV et PDF sont autorisés.");
     }
 
-    private CatalogDocument storeDocument(MultipartFile file, String name, String lower, Authentication authentication) throws Exception {
-        CatalogDocument document = new CatalogDocument();
-        document.setFileName(name); document.setContentType(lower.endsWith(".pdf") ? MediaType.APPLICATION_PDF_VALUE : "text/csv");
-        document.setContent(file.getBytes()); document.setUploadedAt(LocalDateTime.now()); document.setUploadedBy(authentication.getName());
-        document.setTotalCopies(10);
-        return repository.save(document);
+    private CatalogDocument storeDocument(MultipartFile file, String name, String lower, Authentication authentication) {
+        try {
+            CatalogDocument document = new CatalogDocument();
+            document.setFileName(name); document.setContentType(lower.endsWith(".pdf") ? MediaType.APPLICATION_PDF_VALUE : "text/csv");
+            document.setContent(file.getBytes()); document.setUploadedAt(LocalDateTime.now());
+            document.setUploadedBy(authentication == null ? "system" : authentication.getName());
+            document.setTotalCopies(10);
+            return repository.save(document);
+        } catch (java.io.IOException exception) {
+            throw new IllegalArgumentException("Impossible de lire le fichier importé.", exception);
+        }
     }
 
     @GetMapping("/{id}/download")

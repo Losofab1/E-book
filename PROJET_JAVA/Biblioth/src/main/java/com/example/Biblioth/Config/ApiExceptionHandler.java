@@ -51,6 +51,19 @@ public class ApiExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, "Le fichier doit peser entre 1 octet et 25 Mo.");
     }
 
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<Map<String, Object>> handleAccessDenied(org.springframework.security.access.AccessDeniedException exception) {
+        String message = exception.getMessage() == null || exception.getMessage().isBlank()
+                ? "Accès refusé."
+                : exception.getMessage();
+        return build(HttpStatus.FORBIDDEN, message);
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Map<String, Object>> handleUnexpected(Exception exception) {
+        return build(HttpStatus.INTERNAL_SERVER_ERROR, "Une erreur inattendue est survenue.");
+    }
+
     private ResponseEntity<Map<String, Object>> build(HttpStatus status, String message) {
         return ResponseEntity.status(status).body(Map.of(
                 "timestamp", LocalDateTime.now(),

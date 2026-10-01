@@ -59,6 +59,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/digital/books/*/access").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/books/**").hasAnyRole("ADMIN", "BIBLIOTHECAIRE", "ADHERENT", "ETUDIANT", "PROFESSEUR")
                         .requestMatchers("/api/books/**").hasAnyRole("ADMIN", "BIBLIOTHECAIRE")
+                        .requestMatchers(HttpMethod.GET, "/api/catalogs").hasAnyRole("ADMIN", "BIBLIOTHECAIRE")
+                        .requestMatchers(HttpMethod.GET, "/api/catalogs/*/download").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/catalogs", "/api/catalogs/**").hasAnyRole("ADMIN", "BIBLIOTHECAIRE")
                         .requestMatchers("/api/digital/loans/**", "/api/digital/reservations/**").authenticated()
                         .requestMatchers("/api/loans/**", "/api/reservations/**").hasAnyRole("ADMIN", "BIBLIOTHECAIRE")

@@ -8,6 +8,7 @@ import com.example.Biblioth.books.bookModel.BookEntity;
 import com.example.Biblioth.books.bookRepository.BookRepository;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -77,7 +78,8 @@ public class BookService {
         String filename = file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase(Locale.ROOT);
         String contentType = file.getContentType() == null ? "" : file.getContentType().toLowerCase(Locale.ROOT);
         boolean isCsv = filename.endsWith(".csv") || "text/csv".equals(contentType) || "application/csv".equals(contentType);
-        boolean isPdf = filename.endsWith(".pdf") || "application/pdf".equals(contentType) || "application/octet-stream".equals(contentType) && filename.endsWith(".pdf");
+        boolean isPdf = filename.endsWith(".pdf") || "application/pdf".equals(contentType)
+                || ("application/octet-stream".equals(contentType) && filename.endsWith(".pdf"));
 
         if (!isCsv && !isPdf) {
             throw new IllegalArgumentException("Le fichier importé doit être au format CSV ou PDF.");
@@ -130,7 +132,8 @@ public class BookService {
             int importedCount = 0;
             for (int index = 1; index < rows.size(); index++) {
                 String[] values = parseCsvLine(rows.get(index));
-                if (values.length == 0 || values.length <= Math.max(Math.max(titleIndex, authorIndex), Math.max(isbnIndex, categoryIndex))) {
+                int requiredMax = Math.max(titleIndex, Math.max(authorIndex, isbnIndex));
+                if (values.length == 0 || values.length <= requiredMax) {
                     continue;
                 }
 
@@ -141,11 +144,12 @@ public class BookService {
                     continue;
                 }
 
+                String category = safeValue(values, categoryIndex);
                 BookRequest request = new BookRequest();
                 request.setTitle(title);
                 request.setAuthor(author);
                 request.setIsbn(isbn);
-                request.setCategory(safeValue(values, categoryIndex));
+                request.setCategory(category.isBlank() ? null : category);
                 request.setTotalCopies(1);
 
                 try {
@@ -271,8 +275,12 @@ public class BookService {
     }
 
     private String normalizeCsvHeader(String value) {
-        return value == null ? "" : value
-                .replace("\uFEFF", "")
+        if (value == null) {
+            return "";
+        }
+        String withoutBom = value.replace("\uFEFF", "");
+        String decomposed = Normalizer.normalize(withoutBom, Normalizer.Form.NFD);
+        return decomposed
                 .replaceAll("[\\p{M}]", "")
                 .toLowerCase(Locale.ROOT)
                 .replaceAll("[^a-z0-9]", "");

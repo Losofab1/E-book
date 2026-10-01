@@ -36,7 +36,7 @@ const Catalog = () => {
     {
       key: 'type',
       label: 'Format',
-      render: (document) => (document.type.includes('pdf')
+      render: (document) => ((document.type ?? '').toLowerCase().includes('pdf')
         ? <StatusBadge label="PDF" variant="info" />
         : <StatusBadge label="CSV" variant="neutral" />),
     },
@@ -64,6 +64,7 @@ const Catalog = () => {
   ]
 
   const load = async () => {
+    setLoading(true)
     try {
       const [bookResult, documentResult] = await Promise.allSettled([bookService.getAll(), api.get<CatalogFile[]>('/catalogs')])
       if (bookResult.status === 'fulfilled' && Array.isArray(bookResult.value.data)) {
@@ -73,7 +74,12 @@ const Catalog = () => {
         setDocuments(documentResult.value.data)
       }
       if (bookResult.status === 'rejected' || documentResult.status === 'rejected') {
-        setMessage('Impossible de charger le catalogue depuis le serveur. Vérifiez que le backend a redémarré (migration V7) puis réessayez.')
+        const status = documentResult.status === 'rejected' ? (documentResult.reason?.response?.status as number | undefined) : undefined
+        setMessage(status === 403
+          ? 'Accès réservé au personnel pour la liste des documents.'
+          : 'Impossible de charger le catalogue depuis le serveur. Vérifiez que le backend a démarré puis réessayez.')
+      } else {
+        setMessage('')
       }
     }
     catch { setMessage('Impossible de charger le catalogue depuis le serveur.') }
@@ -89,14 +95,16 @@ const Catalog = () => {
     const rejected = files.length - valid.length
     if (valid.length === 0) { setMessage('Seuls les formats CSV et PDF de 1 octet à 25 Mo sont autorisés.'); return }
     setUploading(true)
+    setMessage('')
     try {
       if (valid.length === 1) {
         const data = new FormData(); data.append('file', valid[0])
-        const response = await api.post<{ importedCount: number; message: string }>('/catalogs', data, { headers: { 'Content-Type': 'multipart/form-data' } })
+        // Ne pas forcer Content-Type : axios génère la boundary multipart.
+        const response = await api.post<{ importedCount: number; message: string }>('/catalogs', data)
         setMessage(`${response.data.message} Les doublons ISBN éventuels sont ignorés.${rejected > 0 ? ` ${rejected} fichier(s) rejeté(s) (format ou taille).` : ''}`)
       } else {
         const data = new FormData(); valid.forEach(file => data.append('files', file))
-        const response = await api.post<{ importedDocuments: number; totalImportedBooks: number; message: string }>('/catalogs/batch', data, { headers: { 'Content-Type': 'multipart/form-data' } })
+        const response = await api.post<{ importedDocuments: number; totalImportedBooks: number; message: string }>('/catalogs/batch', data)
         setMessage(`${response.data.message} ${response.data.totalImportedBooks} ouvrage(s) importé(s). Les doublons ISBN sont ignorés.${rejected > 0 ? ` ${rejected} fichier(s) rejeté(s) (format ou taille).` : ''}`)
       }
       await load()
@@ -106,7 +114,12 @@ const Catalog = () => {
 
   const download = async (document: { id: number; name: string }) => {
     try { await catalogCirculationService.download(document.id, document.name) }
-    catch { setMessage('Téléchargement impossible.') }
+    catch (error: any) {
+      const status = error?.response?.status as number | undefined
+      setMessage(status === 403
+        ? 'Téléchargement réservé : empruntez ce catalogue ou attendez une réservation disponible.'
+        : (error?.response?.data?.message ?? 'Téléchargement impossible.'))
+    }
   }
 
   return <section className="page">

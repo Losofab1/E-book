@@ -29,6 +29,7 @@ export const bookService = {
   importCsv(file: File) {
     const data = new FormData()
     data.append('file', file)
-    return api.post<{ importedCount: number }>('/books/import', data, { headers: { 'Content-Type': 'multipart/form-data' } })
+    // Ne pas forcer Content-Type : axios génère la boundary multipart.
+    return api.post<{ importedCount: number }>('/books/import', data)
   },
 }

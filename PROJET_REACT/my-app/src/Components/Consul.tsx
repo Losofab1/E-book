@@ -71,7 +71,7 @@ const Consul = () => {
   }, [books, term])
   const filteredDocuments = useMemo(() => {
     if (!term) return documents
-    return documents.filter((document) => document.name.toLocaleLowerCase('fr').includes(term))
+    return documents.filter((document) => (document.name ?? '').toLocaleLowerCase('fr').includes(term))
   }, [documents, term])
 
   const closeReader = () => {
@@ -96,7 +96,8 @@ const Consul = () => {
   }
 
   const openCatalogReader = async (document: CatalogDocument) => {
-    const isPdf = document.contentType.includes('pdf')
+    const isPdf = (document.contentType ?? '').toLowerCase().includes('pdf')
+      || (document.name ?? '').toLowerCase().endsWith('.pdf')
     setReader({
       kind: 'catalog', document, loading: true, error: '', fullAccess: false, isPdf,
       previewUrl: null, previewText: null, fullUrl: null, fullText: null, fullTextUrl: null,
@@ -222,7 +223,7 @@ const Consul = () => {
                       <div className="min-w-0">
                         <p className="truncate font-semibold">{document.name}</p>
                         <p className="mt-1 text-sm text-slate-600">
-                          {document.contentType.includes('pdf') ? 'PDF' : 'CSV'}
+                          {(document.contentType ?? '').toLowerCase().includes('pdf') ? 'PDF' : 'CSV'}
                           {` · ${document.totalCopies ?? 10} ex. · ${document.availableCopies ?? (document.available ? document.totalCopies ?? 10 : 0)} disponible(s)`}
                           {!document.available && document.dueAt ? ` · Retour le ${new Date(document.dueAt).toLocaleDateString('fr-FR')}` : ''}
                           {` · ${document.waitingReservations} réservation(s) en attente`}
