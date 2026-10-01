@@ -49,11 +49,9 @@ const ReaderModal = ({ title, badgeLabel, badgeVariant, notice, actions, childre
     }
   }
 
-  const handleClose = useCallback(async () => {
-    try {
-      if (document.fullscreenElement) await document.exitFullscreen()
-    } catch {
-      /* sortie plein écran impossible, on ferme quand même */
+  const handleClose = useCallback(() => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => undefined)
     }
     onClose()
   }, [onClose])
@@ -61,7 +59,7 @@ const ReaderModal = ({ title, badgeLabel, badgeVariant, notice, actions, childre
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/60 sm:items-center sm:p-4"
-      onClick={() => void handleClose()}
+      onClick={handleClose}
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -75,7 +73,7 @@ const ReaderModal = ({ title, badgeLabel, badgeVariant, notice, actions, childre
           <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
             <button
               type="button"
-              onClick={() => void handleClose()}
+              onClick={handleClose}
               aria-label="Retour à la liste"
               title="Retour"
               className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center gap-1.5 rounded-xl bg-slate-100 px-2 text-sm font-semibold text-slate-800 hover:bg-slate-200"
@@ -98,7 +96,7 @@ const ReaderModal = ({ title, badgeLabel, badgeVariant, notice, actions, childre
             </button>
             <button
               type="button"
-              onClick={() => void handleClose()}
+              onClick={handleClose}
               aria-label="Fermer le lecteur"
               title="Fermer"
               className="min-h-[44px] min-w-[44px] rounded-xl p-2 text-slate-600 hover:bg-slate-100"

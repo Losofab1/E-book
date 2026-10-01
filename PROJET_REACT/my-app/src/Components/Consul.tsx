@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BookOpenText, FileText, Search } from 'lucide-react'
 import { bookService } from '../services/bookService'
@@ -71,6 +71,39 @@ const Consul = () => {
     return () => { cancelled = true }
   }, [])
 
+  const closeReader = useCallback(() => {
+    readerSession.current += 1
+    document.body.style.overflow = ''
+    if (window.location.hash === '#lecture') {
+      window.history.back()
+    }
+    setReader((current) => {
+      if (current.kind === 'catalog') {
+        if (current.previewUrl) URL.revokeObjectURL(current.previewUrl)
+        if (current.fullUrl) URL.revokeObjectURL(current.fullUrl)
+        if (current.fullTextUrl) URL.revokeObjectURL(current.fullTextUrl)
+      }
+      return { kind: 'closed' }
+    })
+  }, [])
+
+  useEffect(() => {
+    if (window.location.hash === '#lecture') {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search)
+    }
+    const onHashChange = () => {
+      if (window.location.hash !== '#lecture') closeReader()
+    }
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [closeReader])
+
+  const pushReaderHistory = () => {
+    if (window.location.hash !== '#lecture') {
+      window.history.pushState(null, '', '#lecture')
+    }
+  }
+
   const term = debouncedSearch.trim().toLocaleLowerCase('fr')
   const filteredBooks = useMemo(() => {
     if (!term) return books
@@ -94,20 +127,9 @@ const Consul = () => {
     return () => clearTimeout(t)
   }, [search])
 
-  const closeReader = () => {
-    readerSession.current += 1
-    setReader((current) => {
-      if (current.kind === 'catalog') {
-        if (current.previewUrl) URL.revokeObjectURL(current.previewUrl)
-        if (current.fullUrl) URL.revokeObjectURL(current.fullUrl)
-        if (current.fullTextUrl) URL.revokeObjectURL(current.fullTextUrl)
-      }
-      return { kind: 'closed' }
-    })
-  }
-
   const openBookReader = async (book: Book) => {
     const session = ++readerSession.current
+    pushReaderHistory()
     setReader({ kind: 'book', book, loading: true, error: '', access: null })
     try {
       const response = await digitalAccessService.getAccessStatus(book.id)
@@ -121,6 +143,7 @@ const Consul = () => {
 
   const openCatalogReader = async (document: CatalogDocument) => {
     const session = ++readerSession.current
+    pushReaderHistory()
     const isPdf = (document.contentType ?? '').toLowerCase().includes('pdf')
       || (document.name ?? '').toLowerCase().endsWith('.pdf')
     setReader({
