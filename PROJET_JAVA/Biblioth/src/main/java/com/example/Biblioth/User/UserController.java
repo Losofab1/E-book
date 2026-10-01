@@ -5,6 +5,7 @@ import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -21,17 +22,24 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api")
 public class UserController {
+    /** Doit rester identique au compte créé par AdminInitializer. */
+    private static final String DEFAULT_SYSTEM_ADMIN_EMAIL = "fabricelodjou014@gmail.com";
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final String adminEmail;
 
-    public UserController(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public UserController(UserRepository userRepository, PasswordEncoder passwordEncoder,
+            @Value("${ADMIN_EMAIL:}") String adminEmail) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.adminEmail = adminEmail;
     }
 
     @GetMapping("/auth/profile")
     public UserResponse profile(Authentication authentication) {
-        return UserResponse.from(currentUser(authentication));
+        UserEntity user = currentUser(authentication);
+        return UserResponse.from(user, isSystemAdmin(user.getEmail()));
     }
 
     @PutMapping("/auth/profile")
@@ -61,7 +69,8 @@ public class UserController {
         if (request.getCity() != null) {
             user.setCity(request.getCity().trim());
         }
-        return UserResponse.from(userRepository.save(user));
+        UserEntity saved = userRepository.save(user);
+        return UserResponse.from(saved, isSystemAdmin(saved.getEmail()));
     }
 
     @org.springframework.web.bind.annotation.PatchMapping("/users/profile/coordinates")
@@ -71,7 +80,9 @@ public class UserController {
 
     @GetMapping("/admin/users")
     public List<UserResponse> allUsers() {
-        return userRepository.findAll().stream().map(UserResponse::from).toList();
+        return userRepository.findAll().stream()
+                .map(user -> UserResponse.from(user, isSystemAdmin(user.getEmail())))
+                .toList();
     }
 
     @GetMapping("/staff/borrowers")
@@ -101,19 +112,33 @@ public class UserController {
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setRole(request.getRole());
         user.setActif(true);
-        return ResponseEntity.status(HttpStatus.CREATED).body(UserResponse.from(userRepository.save(user)));
+        UserEntity saved = userRepository.save(user);
+        return ResponseEntity.status(HttpStatus.CREATED).body(UserResponse.from(saved, isSystemAdmin(saved.getEmail())));
     }
 
     @DeleteMapping("/admin/users/{id}")
     public ResponseEntity<Void> deactivateUser(@PathVariable Long id, Authentication authentication) {
         UserEntity user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Utilisateur introuvable."));
+        if (isSystemAdmin(user.getEmail())) {
+            throw new IllegalArgumentException("Le compte administrateur système ne peut pas être désactivé.");
+        }
         if (user.getEmail().equalsIgnoreCase(authentication.getName())) {
             throw new IllegalArgumentException("Vous ne pouvez pas désactiver votre propre compte.");
         }
         user.setActif(false);
         userRepository.save(user);
         return ResponseEntity.noContent().build();
+    }
+
+    private String systemAdminEmail() {
+        return (adminEmail == null || adminEmail.isBlank())
+                ? DEFAULT_SYSTEM_ADMIN_EMAIL
+                : adminEmail.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private boolean isSystemAdmin(String email) {
+        return email != null && email.equalsIgnoreCase(systemAdminEmail());
     }
 
     private UserEntity currentUser(Authentication authentication) {

@@ -7,7 +7,7 @@ import Alert from '../Components/ui/Alert'
 import StatusBadge from '../Components/ui/StatusBadge'
 
 type Role = 'ADMIN' | 'BIBLIOTHECAIRE' | 'ETUDIANT' | 'PROFESSEUR' | 'ADHERENT'
-type User = { id: number; name: string; email: string; role: Role; actif: boolean }
+type User = { id: number; name: string; email: string; role: Role; actif: boolean; system?: boolean }
 
 const roleLabels: Record<Role, string> = {
   ADMIN: 'Administrateur',
@@ -73,9 +73,11 @@ const Users = () => {
     {
       key: 'actions',
       label: '',
-      render: (row) => (row.actif
-        ? <button type="button" onClick={() => void deactivate(row)} aria-label={`Désactiver ${row.name}`} className="text-red-700 hover:text-red-900"><Trash2 size={18} /></button>
-        : null),
+      render: (row) => (row.system
+        ? <StatusBadge label="Système" variant="info" />
+        : (row.actif
+          ? <button type="button" onClick={() => void deactivate(row)} aria-label={`Désactiver ${row.name}`} className="text-red-700 hover:text-red-900"><Trash2 size={18} /></button>
+          : null)),
     },
   ]
 
