@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BookOpenText, FileText, Search } from 'lucide-react'
 import { bookService } from '../services/bookService'
@@ -46,6 +46,7 @@ const Consul = () => {
   const [showAllBooks, setShowAllBooks] = useState(false)
   const [showAllDocuments, setShowAllDocuments] = useState(false)
   const [reader, setReader] = useState<Reader>({ kind: 'closed' })
+  const readerSession = useRef(0)
   const PREVIEW_SIZE = 10
 
   useEffect(() => {
@@ -94,6 +95,7 @@ const Consul = () => {
   }, [search])
 
   const closeReader = () => {
+    readerSession.current += 1
     setReader((current) => {
       if (current.kind === 'catalog') {
         if (current.previewUrl) URL.revokeObjectURL(current.previewUrl)
@@ -105,16 +107,20 @@ const Consul = () => {
   }
 
   const openBookReader = async (book: Book) => {
+    const session = ++readerSession.current
     setReader({ kind: 'book', book, loading: true, error: '', access: null })
     try {
       const response = await digitalAccessService.getAccessStatus(book.id)
+      if (readerSession.current !== session) return
       setReader({ kind: 'book', book, loading: false, error: '', access: response.data })
     } catch {
+      if (readerSession.current !== session) return
       setReader({ kind: 'book', book, loading: false, error: 'Statut de lecture indisponible.', access: null })
     }
   }
 
   const openCatalogReader = async (document: CatalogDocument) => {
+    const session = ++readerSession.current
     const isPdf = (document.contentType ?? '').toLowerCase().includes('pdf')
       || (document.name ?? '').toLowerCase().endsWith('.pdf')
     setReader({
@@ -147,11 +153,18 @@ const Consul = () => {
           fullTextUrl = URL.createObjectURL(new Blob([fullText], { type: 'text/plain;charset=utf-8' }))
         }
       }
+      if (readerSession.current !== session) {
+        if (previewUrl) URL.revokeObjectURL(previewUrl)
+        if (fullUrl) URL.revokeObjectURL(fullUrl)
+        if (fullTextUrl) URL.revokeObjectURL(fullTextUrl)
+        return
+      }
       setReader({
         kind: 'catalog', document, loading: false, error: '', fullAccess: full, isPdf,
         previewUrl, previewText, fullUrl, fullText, fullTextUrl,
       })
     } catch {
+      if (readerSession.current !== session) return
       setReader({
         kind: 'catalog', document, loading: false, error: 'Lecture impossible pour ce catalogue.', fullAccess: false, isPdf,
         previewUrl: null, previewText: null, fullUrl: null, fullText: null, fullTextUrl: null,
