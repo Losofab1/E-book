@@ -64,7 +64,18 @@ const Catalog = () => {
   ]
 
   const load = async () => {
-    try { const [bookResponse, documentResponse] = await Promise.all([bookService.getAll(), api.get<CatalogFile[]>('/catalogs')]); setBooks(bookResponse.data as Book[]); setDocuments(documentResponse.data) }
+    try {
+      const [bookResult, documentResult] = await Promise.allSettled([bookService.getAll(), api.get<CatalogFile[]>('/catalogs')])
+      if (bookResult.status === 'fulfilled' && Array.isArray(bookResult.value.data)) {
+        setBooks(bookResult.value.data as Book[])
+      }
+      if (documentResult.status === 'fulfilled' && Array.isArray(documentResult.value.data)) {
+        setDocuments(documentResult.value.data)
+      }
+      if (bookResult.status === 'rejected' || documentResult.status === 'rejected') {
+        setMessage('Impossible de charger le catalogue depuis le serveur. Vérifiez que le backend a redémarré (migration V7) puis réessayez.')
+      }
+    }
     catch { setMessage('Impossible de charger le catalogue depuis le serveur.') }
     finally { setLoading(false) }
   }
