@@ -18,6 +18,8 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 public class BookService {
 
+    private static final long MAX_SIZE = 25L * 1024 * 1024;
+
     private final BookRepository bookRepository;
 
     public BookService(BookRepository bookRepository) {
@@ -68,6 +70,9 @@ public class BookService {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("Le fichier d’import est obligatoire.");
         }
+        if (file.getSize() > MAX_SIZE) {
+            throw new IllegalArgumentException("Le fichier doit peser entre 1 octet et 25 Mo.");
+        }
 
         String filename = file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase(Locale.ROOT);
         String contentType = file.getContentType() == null ? "" : file.getContentType().toLowerCase(Locale.ROOT);
@@ -79,7 +84,7 @@ public class BookService {
         }
 
         if (isPdf) {
-            return 1;
+            return 0;
         }
 
         try {
@@ -151,10 +156,8 @@ public class BookService {
                 }
             }
 
-            if (importedCount == 0) {
-                throw new IllegalArgumentException("Aucune ligne valide n’a pu être importée depuis le CSV.");
-            }
-
+            // Retourne 0 si seules des lignes en doublon / invalides : l'archive du document
+            // reste possible côté /api/catalogs, l'import reste résilient et réitérable.
             return importedCount;
         } catch (IOException exception) {
             throw new IllegalArgumentException("Impossible de lire le fichier importé.", exception);

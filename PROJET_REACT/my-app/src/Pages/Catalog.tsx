@@ -27,7 +27,9 @@ const Catalog = () => {
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const [documents, setDocuments] = useState<CatalogFile[]>([])
+  const [uploading, setUploading] = useState(false)
   const canImport = user?.role === 'admin' || user?.role === 'bibliothecaire'
+  const MAX_SIZE = 25 * 1024 * 1024
 
   const documentColumns: TableColumn<CatalogFile>[] = [
     { key: 'name', label: 'Document', render: (document) => <span className="font-medium">{document.name}</span> },
@@ -68,16 +70,26 @@ const Catalog = () => {
   useEffect(() => { void load() }, [])
 
   const upload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
+    const files = Array.from(event.target.files ?? [])
     event.target.value = ''
-    if (!file) return
-    if (!/\.(csv|pdf)$/i.test(file.name)) { setMessage('Les formats CSV et PDF sont autorisés.'); return }
+    if (files.length === 0 || uploading) return
+    const valid = files.filter(file => /\.(csv|pdf)$/i.test(file.name) && file.size > 0 && file.size <= MAX_SIZE)
+    const rejected = files.length - valid.length
+    if (valid.length === 0) { setMessage('Seuls les formats CSV et PDF de 1 octet à 25 Mo sont autorisés.'); return }
+    setUploading(true)
     try {
-      const data = new FormData(); data.append('file', file)
-      const response = await api.post<{ importedCount: number; message: string }>('/catalogs', data, { headers: { 'Content-Type': 'multipart/form-data' } })
-      setMessage(`${response.data.message} Les doublons ISBN éventuels sont ignorés.`)
+      if (valid.length === 1) {
+        const data = new FormData(); data.append('file', valid[0])
+        const response = await api.post<{ importedCount: number; message: string }>('/catalogs', data, { headers: { 'Content-Type': 'multipart/form-data' } })
+        setMessage(`${response.data.message} Les doublons ISBN éventuels sont ignorés.${rejected > 0 ? ` ${rejected} fichier(s) rejeté(s) (format ou taille).` : ''}`)
+      } else {
+        const data = new FormData(); valid.forEach(file => data.append('files', file))
+        const response = await api.post<{ importedDocuments: number; totalImportedBooks: number; message: string }>('/catalogs/batch', data, { headers: { 'Content-Type': 'multipart/form-data' } })
+        setMessage(`${response.data.message} ${response.data.totalImportedBooks} ouvrage(s) importé(s). Les doublons ISBN sont ignorés.${rejected > 0 ? ` ${rejected} fichier(s) rejeté(s) (format ou taille).` : ''}`)
+      }
       await load()
     } catch (error: any) { setMessage(error.response?.data?.message ?? 'Import impossible.') }
+    finally { setUploading(false) }
   }
 
   const download = async (document: { id: number; name: string }) => {
@@ -90,7 +102,7 @@ const Catalog = () => {
       eyebrow="Bibliothèque"
       title="Catalogue"
       description="Données centralisées sur le serveur."
-      extra={canImport && <label className="btn-primary"><Upload size={18} />Importer un catalogue<input className="hidden" type="file" accept=".csv,.pdf,text/csv,application/pdf" onChange={upload} /></label>}
+      extra={canImport && <label className="btn-primary"><Upload size={18} />{uploading ? 'Import en cours…' : 'Importer un catalogue'}<input className="hidden" type="file" accept=".csv,.pdf,text/csv,application/pdf" multiple onChange={upload} disabled={uploading} /></label>}
     />
     {message && <Alert>{message}</Alert>}
     <h2 className="mb-3 mt-6 text-xl font-bold">Documents importés ({documents.length})</h2>

@@ -30,16 +30,51 @@ public class CatalogController {
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Map<String, Object>> upload(@RequestParam("file") MultipartFile file, Authentication authentication) throws Exception {
-        if (file.isEmpty() || file.getSize() > MAX_SIZE) throw new IllegalArgumentException("Le fichier doit peser entre 1 octet et 25 Mo.");
+        validateFile(file);
+        String name = file.getOriginalFilename() == null ? "catalogue" : file.getOriginalFilename();
+        String lower = name.toLowerCase();
+        int imported = lower.endsWith(".csv") ? bookService.importCsv(file) : 0;
+        CatalogDocument saved = storeDocument(file, name, lower, authentication);
+        return ResponseEntity.ok(Map.of("id", saved.getId(), "importedCount", imported, "message", lower.endsWith(".pdf") ? "PDF archivé avec succès." : imported + " ouvrage(s) importé(s)."));
+    }
+
+    @PostMapping(value = "/batch", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, Object>> uploadBatch(@RequestParam("files") java.util.List<MultipartFile> files, Authentication authentication) throws Exception {
+        if (files == null || files.isEmpty()) throw new IllegalArgumentException("Au moins un fichier est obligatoire.");
+        java.util.List<Map<String, Object>> results = new java.util.ArrayList<>();
+        int totalImportedBooks = 0;
+        for (MultipartFile file : files) {
+            String name = file.getOriginalFilename() == null ? "catalogue" : file.getOriginalFilename();
+            try {
+                validateFile(file);
+                String lower = name.toLowerCase();
+                int imported = lower.endsWith(".csv") ? bookService.importCsv(file) : 0;
+                CatalogDocument saved = storeDocument(file, name, lower, authentication);
+                totalImportedBooks += imported;
+                results.add(Map.of("name", name, "id", saved.getId(), "importedCount", imported, "ok", true));
+            } catch (IllegalArgumentException exception) {
+                results.add(Map.of("name", name, "ok", false, "error", exception.getMessage()));
+            }
+        }
+        return ResponseEntity.ok(Map.of(
+                "importedDocuments", results.stream().filter(result -> Boolean.TRUE.equals(result.get("ok"))).count(),
+                "totalImportedBooks", totalImportedBooks,
+                "results", results,
+                "message", results.stream().filter(result -> Boolean.TRUE.equals(result.get("ok"))).count() + " document(s) importé(s)."));
+    }
+
+    private void validateFile(MultipartFile file) {
+        if (file == null || file.isEmpty() || file.getSize() > MAX_SIZE) throw new IllegalArgumentException("Le fichier doit peser entre 1 octet et 25 Mo.");
         String name = file.getOriginalFilename() == null ? "catalogue" : file.getOriginalFilename();
         String lower = name.toLowerCase();
         if (!lower.endsWith(".csv") && !lower.endsWith(".pdf")) throw new IllegalArgumentException("Seuls les formats CSV et PDF sont autorisés.");
-        int imported = lower.endsWith(".csv") ? bookService.importCsv(file) : 0;
+    }
+
+    private CatalogDocument storeDocument(MultipartFile file, String name, String lower, Authentication authentication) throws Exception {
         CatalogDocument document = new CatalogDocument();
         document.setFileName(name); document.setContentType(lower.endsWith(".pdf") ? MediaType.APPLICATION_PDF_VALUE : "text/csv");
         document.setContent(file.getBytes()); document.setUploadedAt(LocalDateTime.now()); document.setUploadedBy(authentication.getName());
-        CatalogDocument saved = repository.save(document);
-        return ResponseEntity.ok(Map.of("id", saved.getId(), "importedCount", imported, "message", lower.endsWith(".pdf") ? "PDF archivé avec succès." : imported + " ouvrage(s) importé(s)."));
+        return repository.save(document);
     }
 
     @GetMapping("/{id}/download")

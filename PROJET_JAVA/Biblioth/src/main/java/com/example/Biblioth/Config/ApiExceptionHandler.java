@@ -9,6 +9,8 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
@@ -42,6 +44,11 @@ public class ApiExceptionHandler {
         body.put("fields", fields);
 
         return ResponseEntity.badRequest().body(body);
+    }
+
+    @ExceptionHandler({MaxUploadSizeExceededException.class, MultipartException.class})
+    public ResponseEntity<Map<String, Object>> handleMultipart() {
+        return build(HttpStatus.BAD_REQUEST, "Le fichier doit peser entre 1 octet et 25 Mo.");
     }
 
     private ResponseEntity<Map<String, Object>> build(HttpStatus status, String message) {
