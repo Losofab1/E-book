@@ -46,7 +46,10 @@ function lazyPdfReader() {
   }))
 }
 
-const CatalogPdfReader = lazyPdfReader()
+/** Précharge le lecteur PDF (voir effet plus bas). */
+const warmPdfReader = () => {
+  void import('./ui/CatalogPdfReader').catch(() => undefined)
+}
 
 type Book = { id: number; title: string; author: string; category: string; availableCopies: number }
 
@@ -82,6 +85,9 @@ const Consul = () => {
   const [showAllBooks, setShowAllBooks] = useState(false)
   const [showAllDocuments, setShowAllDocuments] = useState(false)
   const [reader, setReader] = useState<Reader>({ kind: 'closed' })
+  // Lecteur PDF en chargement différé : recréé à chaque nouvel essai car
+  // React mémorise un import rejeté et le rejoue en échec sans retélécharger.
+  const [PdfReader, setPdfReader] = useState(() => lazyPdfReader())
   const [readerRetry, setReaderRetry] = useState(0)
   // Bouton « Lire » en cours d'ouverture (spinner dessus, double-tap bloqué).
   const [openingCatalogId, setOpeningCatalogId] = useState<number | null>(null)
@@ -127,7 +133,7 @@ const Consul = () => {
     const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true
     if (saveData) return
     pdfPrefetched.current = true
-    const prefetch = () => { void import('./ui/CatalogPdfReader').catch(() => undefined) }
+    const prefetch = () => warmPdfReader()
     if (typeof window.requestIdleCallback === 'function') {
       const id = window.requestIdleCallback(prefetch, { timeout: 4000 })
       return () => window.cancelIdleCallback(id)
@@ -273,6 +279,7 @@ const Consul = () => {
     const session = ++readerSession.current
     pushReaderHistory()
     setReaderRetry(0)
+    setPdfReader(lazyPdfReader())
     setReaderSlow(false)
     setOpeningCatalogId(document.id)
     catalogPreview.current = null
@@ -495,8 +502,8 @@ const Consul = () => {
       {reader.kind === 'catalog' && (
         <ReaderModal
           title={reader.document.name}
-          badgeLabel={reader.loading ? 'Chargement…' : reader.fullLoading ? 'Intégrale en cours…' : reader.fullAccess && (reader.fullUrl || reader.fullText) ? 'Lecture intégrale' : 'Aperçu — première page'}
-          badgeVariant={reader.loading || reader.fullLoading ? 'warning' : reader.fullAccess && (reader.fullUrl || reader.fullText) ? 'success' : 'warning'}
+          badgeLabel={reader.loading ? 'Chargement…' : reader.fullAccess ? 'Lecture intégrale' : 'Aperçu — première page'}
+          badgeVariant={reader.loading ? 'warning' : reader.fullAccess ? 'success' : 'warning'}
           notice={!reader.loading && !reader.error && reader.fullLoading
             ? (readerSlow
               ? 'Aperçu affiché — connexion lente, nouvelles tentatives automatiques en cours pour l’intégrale.'
@@ -536,15 +543,16 @@ const Consul = () => {
           {!reader.loading && !reader.error && (
             <ErrorBoundary
               key={reader.kind === 'catalog' ? `${reader.document.id}-${readerRetry}` : `book-${readerRetry}`}
+              resetKey={reader.kind === 'catalog' ? `${reader.document.id}-${readerRetry}` : `book-${readerRetry}`}
               fallback={
                 <div className="space-y-3">
                   <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-                    Le lecteur n’a pas pu s’afficher (connexion instable ou mise à jour en cours).
+                    Le lecteur n’a pas pu s’afficher (connexion instable ou application mise à jour).
                   </p>
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <button
                       type="button"
-                      onClick={() => setReaderRetry((k) => k + 1)}
+                      onClick={() => { setPdfReader(lazyPdfReader()); setReaderRetry((k) => k + 1) }}
                       className="btn-primary min-h-[44px] flex-1 text-sm"
                     >
                       Réessayer
@@ -569,7 +577,7 @@ const Consul = () => {
             >
               {reader.isPdf ? (
                 <Suspense fallback={<p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement du lecteur PDF…</p>}>
-                  <CatalogPdfReader url={reader.fullUrl ?? reader.previewUrl ?? ''} title={reader.document.name} />
+                  <PdfReader url={reader.fullUrl ?? reader.previewUrl ?? ''} title={reader.document.name} />
                 </Suspense>
               ) : (
                 <CatalogCsvReader text={reader.fullText ?? reader.previewText ?? ''} title={reader.document.name} />

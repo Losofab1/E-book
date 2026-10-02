@@ -3,6 +3,9 @@ import { Component, type ReactNode } from 'react'
 interface ErrorBoundaryProps {
   children: ReactNode
   fallback: ReactNode
+  /** Quand cette clé change, la barrière se réarme (ex. navigation). */
+  resetKey?: string | number
+  onError?: (error: unknown) => void
 }
 
 interface ErrorBoundaryState {
@@ -20,6 +23,22 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
   static getDerivedStateFromError(): ErrorBoundaryState {
     return { hasError: true }
+  }
+
+  componentDidCatch(error: unknown): void {
+    try {
+      console.error('[affichage]', error)
+      sessionStorage.setItem('losofab_last_render_error', String((error as Error)?.message ?? error))
+    } catch {
+      /* stockage indisponible : on ignore */
+    }
+    this.props.onError?.(error)
+  }
+
+  componentDidUpdate(prevProps: ErrorBoundaryProps): void {
+    if (this.state.hasError && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ hasError: false })
+    }
   }
 
   render() {

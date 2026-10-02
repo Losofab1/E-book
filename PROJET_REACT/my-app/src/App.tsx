@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom'
 import Footers from './Components/footers.tsx'
 import NavBar from './Components/NavBar.tsx'
 import Home from './Pages/Home.tsx'
@@ -31,6 +31,44 @@ const NotFound = () => (
   </section>
 )
 
+const PageCrash = () => (
+  <section className="page">
+    <div className="card mx-auto mt-6 max-w-xl text-center">
+      <h1 className="text-2xl font-bold">Une erreur d’affichage est survenue</h1>
+      <p className="mt-2 text-sm text-slate-600">Revenez au catalogue : aucune donnée n’est perdue.</p>
+      <div className="mt-4 flex flex-col justify-center gap-2 sm:flex-row">
+        <Link to="/consulter" className="btn-primary min-h-[44px] flex-1 text-sm">Retour au catalogue</Link>
+        <Link to="/" className="btn-outline min-h-[44px] flex-1 text-sm">Accueil</Link>
+      </div>
+    </div>
+  </section>
+)
+
+const AppRoutes = () => {
+  // La barrière se réarme à chaque navigation : fini le cul-de-sac qui
+  // obligeait à recharger toute la page après une erreur d'affichage.
+  const location = useLocation()
+  return (
+    <ErrorBoundary fallback={<PageCrash />} resetKey={location.pathname}>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/consulter" element={<Consulter />} />
+        <Route path="/catalog" element={<RequireAuth allowedRole={['admin', 'bibliothecaire']}><Catalog /></RequireAuth>} />
+        <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
+        <Route path="/dashboard" element={<RequireAuth allowedRole={['admin', 'bibliothecaire']}><Dashboard /></RequireAuth>} />
+        <Route path="/users" element={<RequireAuth allowedRole="admin"><Users /></RequireAuth>} />
+        <Route path="/loans" element={<RequireAuth><Loans /></RequireAuth>} />
+        <Route path="/reservations" element={<RequireAuth><Reservations /></RequireAuth>} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </ErrorBoundary>
+  )
+}
+
 function App() {
   return (
     <AuthProvider>
@@ -39,23 +77,7 @@ function App() {
           <NavBar />
 
           <main className="pt-24">
-            <ErrorBoundary fallback={<section className="page"><div className="card mt-6 text-center"><h1 className="text-2xl font-bold">Une erreur d’affichage est survenue</h1><p className="mt-2 text-sm text-slate-600">Rechargez la page pour continuer.</p><button type="button" onClick={() => window.location.reload()} className="btn-primary mt-4">Recharger</button></div></section>}>
-            <Routes>
-<Route path="/" element={<Home />} />   
-              <Route path="/login" element={<Login />} />
-              <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/reset-password" element={<ResetPassword />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/consulter" element={<Consulter />} />
-              <Route path="/catalog" element={<RequireAuth allowedRole={['admin', 'bibliothecaire']}><Catalog /></RequireAuth>} />
-              <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
-              <Route path="/dashboard" element={<RequireAuth allowedRole={['admin', 'bibliothecaire']}><Dashboard /></RequireAuth>} />
-              <Route path="/users" element={<RequireAuth allowedRole="admin"><Users /></RequireAuth>} />
-              <Route path="/loans" element={<RequireAuth><Loans /></RequireAuth>} />
-              <Route path="/reservations" element={<RequireAuth><Reservations /></RequireAuth>} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-            </ErrorBoundary>
+            <AppRoutes />
           </main>
 
           <Footers />
