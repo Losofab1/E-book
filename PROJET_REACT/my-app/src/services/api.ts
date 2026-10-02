@@ -28,12 +28,18 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Ne redirige que les sessions expirées : la consultation publique
-      // anonyme ne doit jamais renvoyer vers /login.
+      // Session expirée : nettoie sans jamais casser la lecture publique.
+      // Pas de reload forcé sur les pages publiques (/consulter, /, /login...).
       const hadToken = localStorage.getItem('jwt_token') !== null
       localStorage.removeItem('jwt_token')
       if (hadToken) {
-        window.location.href = '/login'
+        localStorage.removeItem('losofab_auth_user')
+        const path = window.location.pathname ?? ''
+        const isPublicPage = path === '/' || path === '/consulter' || path.startsWith('/login')
+          || path.startsWith('/register') || path.startsWith('/forgot-password') || path.startsWith('/reset-password')
+        if (!isPublicPage && !path.startsWith('/login')) {
+          window.location.href = '/login'
+        }
       }
     }
 

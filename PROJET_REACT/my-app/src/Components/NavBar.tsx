@@ -129,8 +129,11 @@ const getMessageForType = (type: string) => {
   }
 
   const handleMobileNavClick = (event: ReactMouseEvent<HTMLElement>) => {
+    if (!user) return
     const button = (event.target as HTMLElement).closest('button')
-    if (!button?.textContent?.trim().toLowerCase().includes('connexion')) return
+    const label = button?.textContent?.trim().toLowerCase() ?? ''
+    // « déconnexion » contient « connexion » : tester le terme exact côté connecté uniquement.
+    if (!label.includes('déconnexion') && !label.includes('deconnexion')) return
 
     event.preventDefault()
     event.stopPropagation()

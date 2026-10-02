@@ -67,7 +67,7 @@ const Loans = () => {
       setUsersError('')
 
       const [bookResult, loanResult, documentResult, documentLoanResult] = await Promise.allSettled([
-        bookService.getAll(), loanService.getAll(), catalogCirculationService.getDocuments(), catalogCirculationService.getLoans(),
+        bookService.getAll(), loanService.getAll(), staff ? catalogCirculationService.getDocuments() : catalogCirculationService.getPublicDocuments(), catalogCirculationService.getLoans(),
       ])
       if (cancelled) return
 
@@ -87,6 +87,15 @@ const Loans = () => {
 
       if (documentResult.status === 'fulfilled' && Array.isArray(documentResult.value.data)) {
         setDocuments(documentResult.value.data)
+      } else if (staff) {
+        // Repli : si l'endpoint staff répond 403, bascule sur le catalogue public
+        try {
+          const fallback = await catalogCirculationService.getPublicDocuments()
+          if (!cancelled && Array.isArray(fallback.data)) setDocuments(fallback.data)
+          else if (!cancelled) setDocumentsError('Impossible de charger les documents PDF/CSV.')
+        } catch {
+          if (!cancelled) setDocumentsError('Impossible de charger les documents PDF/CSV.')
+        }
       } else {
         setDocumentsError('Impossible de charger les documents PDF/CSV.')
       }
@@ -201,7 +210,7 @@ const Loans = () => {
         <span className="min-w-0">
           <span className="block font-semibold">{document.name}</span>
           <span className="mt-1 block text-sm text-slate-600">
-            {document.contentType.includes('pdf') ? 'PDF' : 'CSV'}
+            {(document.contentType ?? '').toLowerCase().includes('pdf') ? 'PDF' : 'CSV'}
             {` · ${document.totalCopies ?? 10} ex. · ${document.availableCopies ?? (document.available ? 10 : 0)} disponible(s)`}
             {!document.available && document.dueAt ? ` · Retour le ${new Date(document.dueAt).toLocaleDateString('fr-FR')}` : ''}
             {` · ${document.waitingReservations} réservation(s) en attente`}

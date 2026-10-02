@@ -141,7 +141,9 @@ export const catalogCirculationService = {
       const response = await api.get<Blob>(`/catalogs/${id}/content`, { responseType: 'blob' })
       return response.data
     } catch (error: any) {
-      if (error?.response?.status === 404) {
+      // /content exige un prêt actif (403 sans emprunt). Le personnel dispose
+      // de /download : repli sur 403 comme sur 404 pour le téléchargement staff.
+      if (error?.response?.status === 404 || error?.response?.status === 403) {
         const fallback = await api.get<Blob>(`/catalogs/${id}/download`, { responseType: 'blob' })
         return fallback.data
       }

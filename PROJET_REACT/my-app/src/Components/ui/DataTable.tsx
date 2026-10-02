@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 
 export type TableColumn<T> = {
   key: string
@@ -24,6 +24,9 @@ const DataTable = <T,>({
   className = '',
 }: DataTableProps<T>) => {
   const [showAll, setShowAll] = useState(false)
+  // Quand la recherche ou les données changent, on replie sur 10 lignes :
+  // évite d'afficher d'un coup des centaines de lignes après une frappe.
+  useEffect(() => { setShowAll(false) }, [data])
   const displayedData = showAll ? data : data.slice(0, 10)
 
   return (

@@ -42,11 +42,19 @@ const Reservations = () => {
   const reload = async () => {
     setLoading(true)
     const [bookResult, reservationResult, documentsResult, documentReservationsResult, documentLoansResult] = await Promise.allSettled([
-      bookService.getAll(), reservationService.getAll(), catalogCirculationService.getDocuments(), catalogCirculationService.getReservations(), catalogCirculationService.getLoans(),
+      bookService.getAll(), reservationService.getAll(), staff ? catalogCirculationService.getDocuments() : catalogCirculationService.getPublicDocuments(), catalogCirculationService.getReservations(), catalogCirculationService.getLoans(),
     ])
     if (bookResult.status === 'fulfilled') setBooks(bookResult.value.data as Book[])
     if (reservationResult.status === 'fulfilled') setItems(reservationResult.value.data as Reservation[])
     if (documentsResult.status === 'fulfilled') setDocuments(documentsResult.value.data)
+    else if (staff) {
+      try {
+        const fallback = await catalogCirculationService.getPublicDocuments()
+        if (Array.isArray(fallback.data)) setDocuments(fallback.data)
+      } catch {
+        /* message générique ci-dessous */
+      }
+    }
     if (documentReservationsResult.status === 'fulfilled') setDocumentReservations(documentReservationsResult.value.data)
     if (documentLoansResult.status === 'fulfilled' && Array.isArray(documentLoansResult.value.data)) {
       setBorrowedDocumentIds(new Set(
@@ -60,7 +68,7 @@ const Reservations = () => {
     }
     setLoading(false)
   }
-  useEffect(() => { void reload() }, [])
+  useEffect(() => { void reload() }, [user?.id, staff])
   const reserve = async () => {
     if (!user || !bookId) return
     try { await reservationService.create({ userId: user.id, bookId: Number(bookId) }); setMessage('Réservation enregistrée.'); setBookId(''); await reload() }
@@ -166,7 +174,7 @@ const Reservations = () => {
           const existingReservation = documentReservations.find(item => item.userId === user?.id && item.catalogDocumentId === document.id && ['WAITING', 'READY_FOR_PICKUP'].includes(item.status))
           const alreadyBorrowed = borrowedDocumentIds.has(document.id)
           return <div key={document.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-            <div className="min-w-0"><p className="truncate font-semibold">{document.name}</p><p className="mt-1 text-sm text-slate-600">{document.contentType.includes('pdf') ? 'PDF' : 'CSV'} · {document.totalCopies ?? 10} ex. · {document.availableCopies ?? (document.available ? document.totalCopies ?? 10 : 0)} disponible(s) · {alreadyBorrowed ? 'Déjà en prêt pour vous' : document.available ? 'Disponible' : document.dueAt ? `Indisponible jusqu’au ${new Date(document.dueAt).toLocaleDateString('fr-FR')}` : 'Réservation prioritaire en cours'} · {document.waitingReservations} réservation(s) en attente</p></div>
+            <div className="min-w-0"><p className="truncate font-semibold">{document.name}</p><p className="mt-1 text-sm text-slate-600">{(document.contentType ?? '').toLowerCase().includes('pdf') ? 'PDF' : 'CSV'} · {document.totalCopies ?? 10} ex. · {document.availableCopies ?? (document.available ? document.totalCopies ?? 10 : 0)} disponible(s) · {alreadyBorrowed ? 'Déjà en prêt pour vous' : document.available ? 'Disponible' : document.dueAt ? `Indisponible jusqu’au ${new Date(document.dueAt).toLocaleDateString('fr-FR')}` : 'Réservation prioritaire en cours'} · {document.waitingReservations} réservation(s) en attente</p></div>
             {!staff && <button type="button" disabled={document.available || alreadyBorrowed || documentId === document.id || Boolean(existingReservation)} onClick={() => void reserveDocument(document.id)} title={alreadyBorrowed ? 'Vous avez déjà ce catalogue en prêt' : undefined} className="btn-outline shrink-0 px-3 py-2 text-sm disabled:cursor-not-allowed">{alreadyBorrowed ? 'Déjà emprunté' : existingReservation ? existingReservation.status === 'READY_FOR_PICKUP' ? 'Disponible pour vous' : 'Déjà réservé' : document.available ? 'Disponible dans Prêts' : documentId === document.id ? 'Envoi…' : 'Réserver'}</button>}
           </div>
         })}

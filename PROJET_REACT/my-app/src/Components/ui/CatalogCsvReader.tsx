@@ -49,6 +49,7 @@ function parseCsvLine(line: string, delimiter: string): string[] {
 const CatalogCsvReader = ({ text, title }: CatalogCsvReaderProps) => {
   const [fontIndex, setFontIndex] = useState(1)
   const [filter, setFilter] = useState('')
+  const [showAllRows, setShowAllRows] = useState(false)
   const fontSize = FONT_SIZES[fontIndex] ?? 16
 
   const { headers, rows } = useMemo(() => {
@@ -65,6 +66,10 @@ const CatalogCsvReader = ({ text, title }: CatalogCsvReaderProps) => {
     if (!term) return rows
     return rows.filter((row) => row.some((cell) => cell.toLocaleLowerCase('fr').includes(term)))
   }, [rows, filter])
+
+  // Fluidité : un CSV intégral peut contenir des milliers de lignes.
+  // On n'en rend que 250 d'un coup, le reste sur demande.
+  const visibleRows = showAllRows ? filteredRows : filteredRows.slice(0, 250)
 
   if (headers.length === 0) {
     return <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Aperçu vide pour « {title} ».</p>
@@ -103,7 +108,7 @@ const CatalogCsvReader = ({ text, title }: CatalogCsvReaderProps) => {
         <input
           type="search"
           value={filter}
-          onChange={(event) => setFilter(event.target.value)}
+          onChange={(event) => { setFilter(event.target.value); setShowAllRows(false) }}
           placeholder="Filtrer les lignes…"
           aria-label={`Filtrer les lignes de ${title}`}
           className="w-full bg-white py-3 pl-10 pr-3 text-[16px] outline-none placeholder:text-slate-500"
@@ -125,7 +130,7 @@ const CatalogCsvReader = ({ text, title }: CatalogCsvReaderProps) => {
             </tr>
           </thead>
           <tbody>
-            {filteredRows.map((row, rowIndex) => (
+            {visibleRows.map((row, rowIndex) => (
               <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                 {headers.map((_, cellIndex) => (
                   <td key={cellIndex} className="min-w-[120px] border-b border-slate-100 px-3 py-2.5 align-top leading-relaxed text-slate-800">
@@ -136,6 +141,17 @@ const CatalogCsvReader = ({ text, title }: CatalogCsvReaderProps) => {
             ))}
           </tbody>
         </table>
+        {filteredRows.length > 250 && (
+          <div className="flex justify-center border-t border-slate-200 bg-white px-6 py-4">
+            <button
+              type="button"
+              onClick={() => setShowAllRows((current) => !current)}
+              className="rounded-full border border-green-700 px-5 py-2 text-sm font-semibold text-green-700 transition hover:bg-green-50"
+            >
+              {showAllRows ? 'Voir moins' : `Voir plus (${filteredRows.length - 250} restante(s))`}
+            </button>
+          </div>
+        )}
         {filteredRows.length === 0 && (
           <p className="p-6 text-center text-sm text-slate-600">Aucune ligne ne correspond à ce filtre.</p>
         )}

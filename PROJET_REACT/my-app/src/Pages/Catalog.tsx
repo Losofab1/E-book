@@ -37,7 +37,31 @@ const Catalog = () => {
   const MAX_SIZE = 25 * 1024 * 1024
   const loading = loadingBooks || loadingDocs
 
-  const documentColumns: TableColumn<CatalogFile>[] = [
+  const download = useCallback(async (document: { id: number; name: string }) => {
+    try { await catalogCirculationService.download(document.id, document.name) }
+    catch (error: any) {
+      setMessage(error?.response?.data?.message ?? 'Téléchargement impossible.')
+    }
+  }, [])
+
+  const remove = useCallback(async (document: { id: number; name: string }) => {
+    if (!window.confirm(`Supprimer le catalogue « ${document.name} » ?`)) return
+    try {
+      await api.delete(`/catalogs/${document.id}`)
+      clearCatalogCache()
+      setDocuments((prev) => prev.filter((d) => d.id !== document.id))
+      setMessage(`Catalogue « ${document.name} » supprimé.`)
+    } catch (error: any) {
+      const status = error?.response?.status as number | undefined
+      setMessage(status === 403
+        ? 'Suppression réservée à l’administrateur.'
+        : (error?.response?.data?.message ?? 'Suppression impossible.'))
+    }
+  }, [])
+
+  // Mémorisé : sans ça, chaque frappe recrée les colonnes et fait
+  // re-rendre toutes les lignes du tableau (saccades sur gros catalogue).
+  const documentColumns: TableColumn<CatalogFile>[] = useMemo(() => [
     { key: 'name', label: 'Document', render: (document) => <span className="font-medium">{document.name}</span> },
     {
       key: 'type',
@@ -88,7 +112,7 @@ const Catalog = () => {
         </span>
       ),
     },
-  ]
+  ], [canImport, isAdmin, download, remove])
 
   const load = useCallback(async () => {
     setLoadingBooks(true)
@@ -155,28 +179,6 @@ const Catalog = () => {
     } catch (error: any) { setMessage(error.response?.data?.message ?? 'Import impossible.') }
     finally { setUploading(false); clearCatalogCache() }
   }
-
-  const download = useCallback(async (document: { id: number; name: string }) => {
-    try { await catalogCirculationService.download(document.id, document.name) }
-    catch (error: any) {
-      setMessage(error?.response?.data?.message ?? 'Téléchargement impossible.')
-    }
-  }, [])
-
-  const remove = useCallback(async (document: { id: number; name: string }) => {
-    if (!window.confirm(`Supprimer le catalogue « ${document.name} » ?`)) return
-    try {
-      await api.delete(`/catalogs/${document.id}`)
-      clearCatalogCache()
-      setDocuments((prev) => prev.filter((d) => d.id !== document.id))
-      setMessage(`Catalogue « ${document.name} » supprimé.`)
-    } catch (error: any) {
-      const status = error?.response?.status as number | undefined
-      setMessage(status === 403
-        ? 'Suppression réservée à l’administrateur.'
-        : (error?.response?.data?.message ?? 'Suppression impossible.'))
-    }
-  }, [])
 
   return <section className="page">
     <PageHeader

@@ -38,7 +38,7 @@ const Dashboard = () => {
     let cancelled = false
     const load = async () => {
       try {
-        const [booksRes, loansRes, reservationsRes, documentsRes, documentLoansRes, documentReservationsRes] = await Promise.all([
+        const [booksRes, loansRes, reservationsRes, documentsRes, documentLoansRes, documentReservationsRes] = await Promise.allSettled([
           bookService.getAll(),
           loanService.getAll(),
           reservationService.getAll(),
@@ -47,12 +47,15 @@ const Dashboard = () => {
           catalogCirculationService.getReservations(),
         ])
         if (cancelled) return
-        const books = asArray(booksRes.data) as unknown as BookRow[]
-        const loans = asArray(loansRes.data) as unknown as LoanRow[]
-        const reservations = asArray(reservationsRes.data) as unknown as ReservationRow[]
-        const documents = asArray(documentsRes.data) as unknown as CatalogDocument[]
-        const documentLoans = asArray(documentLoansRes.data) as unknown as LoanRow[]
-        const documentReservations = asArray(documentReservationsRes.data) as unknown as ReservationRow[]
+        const books = asArray(booksRes.status === 'fulfilled' ? booksRes.value.data : []) as unknown as BookRow[]
+        const loans = asArray(loansRes.status === 'fulfilled' ? loansRes.value.data : []) as unknown as LoanRow[]
+        const reservations = asArray(reservationsRes.status === 'fulfilled' ? reservationsRes.value.data : []) as unknown as ReservationRow[]
+        const documents = asArray(documentsRes.status === 'fulfilled' ? documentsRes.value.data : []) as unknown as CatalogDocument[]
+        const documentLoans = asArray(documentLoansRes.status === 'fulfilled' ? documentLoansRes.value.data : []) as unknown as LoanRow[]
+        const documentReservations = asArray(documentReservationsRes.status === 'fulfilled' ? documentReservationsRes.value.data : []) as unknown as ReservationRow[]
+        if ([booksRes, loansRes, reservationsRes, documentsRes, documentLoansRes, documentReservationsRes].every((r) => r.status === 'rejected')) {
+          throw new Error('all-failed')
+        }
         const now = Date.now()
         setStats({
           books: books.length,

@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom'
 import Footers from './Components/footers.tsx'
 import NavBar from './Components/NavBar.tsx'
 import Home from './Pages/Home.tsx'
@@ -16,6 +16,20 @@ import Profile from './Pages/Profile.tsx'
 import { AuthProvider } from './AuthContext'
 import RequireAuth from './RequireAuth'
 import BackToTop from './Components/BackToTop'
+import ErrorBoundary from './Components/ui/ErrorBoundary'
+
+const NotFound = () => (
+  <section className="page">
+    <div className="card mt-6 text-center">
+      <h1 className="text-2xl font-bold">Page introuvable</h1>
+      <p className="mt-2 text-sm text-slate-600">L’adresse demandée n’existe pas.</p>
+      <div className="mt-4 flex justify-center gap-2">
+        <Link to="/" className="btn-primary">Accueil</Link>
+        <Link to="/consulter" className="btn-outline">Consulter le catalogue</Link>
+      </div>
+    </div>
+  </section>
+)
 
 function App() {
   return (
@@ -25,6 +39,7 @@ function App() {
           <NavBar />
 
           <main className="pt-24">
+            <ErrorBoundary fallback={<section className="page"><div className="card mt-6 text-center"><h1 className="text-2xl font-bold">Une erreur d’affichage est survenue</h1><p className="mt-2 text-sm text-slate-600">Rechargez la page pour continuer.</p><button type="button" onClick={() => window.location.reload()} className="btn-primary mt-4">Recharger</button></div></section>}>
             <Routes>
 <Route path="/" element={<Home />} />   
               <Route path="/login" element={<Login />} />
@@ -38,7 +53,9 @@ function App() {
               <Route path="/users" element={<RequireAuth allowedRole="admin"><Users /></RequireAuth>} />
               <Route path="/loans" element={<RequireAuth><Loans /></RequireAuth>} />
               <Route path="/reservations" element={<RequireAuth><Reservations /></RequireAuth>} />
+              <Route path="*" element={<NotFound />} />
             </Routes>
+            </ErrorBoundary>
           </main>
 
           <Footers />
