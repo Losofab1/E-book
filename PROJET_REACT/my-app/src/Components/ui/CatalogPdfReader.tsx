@@ -124,6 +124,14 @@ const CatalogPdfReader = ({ url, title }: CatalogPdfReaderProps) => {
     [numPages],
   )
 
+  if (!url) {
+    return (
+      <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+        Document vide ou lien expiré. Fermez puis rouvrez la lecture.
+      </p>
+    )
+  }
+
   if (loading) {
     return (
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600" role="status">

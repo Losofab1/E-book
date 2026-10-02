@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { memo, useEffect, useState, type ReactNode } from 'react'
 
 export type TableColumn<T> = {
   key: string
@@ -24,9 +24,11 @@ const DataTable = <T,>({
   className = '',
 }: DataTableProps<T>) => {
   const [showAll, setShowAll] = useState(false)
-  // Quand la recherche ou les données changent, on replie sur 10 lignes :
-  // évite d'afficher d'un coup des centaines de lignes après une frappe.
-  useEffect(() => { setShowAll(false) }, [data])
+  // Replié quand le nombre de lignes change (recherche...). On suit la
+  // longueur et non la référence : les parents recréent souvent le tableau
+  // à chaque rendu, ce qui replierait le tableau en pleine interaction.
+  const dataLength = data.length
+  useEffect(() => { setShowAll(false) }, [dataLength])
   const displayedData = showAll ? data : data.slice(0, 10)
 
   return (
@@ -79,4 +81,4 @@ const DataTable = <T,>({
   )
 }
 
-export default DataTable
+export default memo(DataTable) as typeof DataTable

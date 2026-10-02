@@ -13,14 +13,36 @@ import ShowMoreButton from './ui/ShowMoreButton'
 import ErrorBoundary from './ui/ErrorBoundary'
 import CatalogCsvReader from './ui/CatalogCsvReader'
 
-/** Recharge le lecteur PDF : 1 nouvel essai après une coupure réseau brève. */
+/** Réessaie une requête réseau avec délais croissants (coupures mobiles brèves). */
+async function withRetry<T>(fn: () => Promise<T>, delays: number[] = [600, 1200]): Promise<T> {
+  let remaining = delays
+  for (;;) {
+    try {
+      return await fn()
+    } catch (error) {
+      const [wait, ...rest] = remaining
+      if (wait === undefined) throw error
+      await new Promise((resolve) => setTimeout(resolve, wait))
+      remaining = rest
+    }
+  }
+}
+
+/** Recharge le lecteur PDF : 3 essais avec délais croissants (réseau mobile instable). */
 function lazyPdfReader() {
+  const delays = [1500, 3000]
   return lazy(() => new Promise<{ default: typeof import('./ui/CatalogPdfReader').default }>((resolve, reject) => {
-    import('./ui/CatalogPdfReader').then(resolve).catch(() => {
-      setTimeout(() => {
-        import('./ui/CatalogPdfReader').then(resolve).catch(reject)
-      }, 1500)
-    })
+    const attempt = (left: number[]) => {
+      import('./ui/CatalogPdfReader').then(resolve).catch(() => {
+        const [wait, ...rest] = left
+        if (wait === undefined) {
+          reject(new Error('pdf-reader-chunk'))
+          return
+        }
+        setTimeout(() => attempt(rest), wait)
+      })
+    }
+    attempt(delays)
   }))
 }
 
@@ -37,6 +59,7 @@ type CatalogReader = {
   error: string
   fullAccess: boolean
   fullLoading: boolean
+  fullError: boolean
   isPdf: boolean
   previewUrl: string | null
   previewText: string | null
@@ -59,7 +82,11 @@ const Consul = () => {
   const [showAllBooks, setShowAllBooks] = useState(false)
   const [showAllDocuments, setShowAllDocuments] = useState(false)
   const [reader, setReader] = useState<Reader>({ kind: 'closed' })
+  const [readerRetry, setReaderRetry] = useState(0)
   const readerSession = useRef(0)
+  const pdfPrefetched = useRef(false)
+  // Aperçu courant : permet de relancer la version intégrale sans tout recharger.
+  const catalogPreview = useRef<{ document: CatalogDocument; isPdf: boolean; previewUrl: string | null; previewText: string | null } | null>(null)
   const PREVIEW_SIZE = 10
 
   useEffect(() => {
@@ -84,8 +111,29 @@ const Consul = () => {
     return () => { cancelled = true }
   }, [])
 
+  // Précharge le lecteur PDF quand le navigateur est inactif : sur téléphone,
+  // télécharger ses ~485 Ko au moment du « Lire » échoue souvent et affichait
+  // « le lecteur n'a pas pu s'afficher ». Sauf mode économiseur de données.
+  useEffect(() => {
+    if (loading || pdfPrefetched.current) return
+    const hasPdf = documents.some((d) => (d.contentType ?? '').toLowerCase().includes('pdf')
+      || (d.name ?? '').toLowerCase().endsWith('.pdf'))
+    if (!hasPdf) return
+    const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true
+    if (saveData) return
+    pdfPrefetched.current = true
+    const prefetch = () => { void import('./ui/CatalogPdfReader').catch(() => undefined) }
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(prefetch, { timeout: 4000 })
+      return () => window.cancelIdleCallback(id)
+    }
+    const t = setTimeout(prefetch, 2500)
+    return () => clearTimeout(t)
+  }, [loading, documents])
+
   const closeReader = useCallback(() => {
     readerSession.current += 1
+    catalogPreview.current = null
     document.body.style.overflow = ''
     if (window.location.hash === '#lecture') {
       window.history.back()
@@ -143,9 +191,10 @@ const Consul = () => {
   const openBookReader = async (book: Book) => {
     const session = ++readerSession.current
     pushReaderHistory()
+    setReaderRetry(0)
     setReader({ kind: 'book', book, loading: true, error: '', access: null })
     try {
-      const response = await digitalAccessService.getAccessStatus(book.id)
+      const response = await withRetry(() => digitalAccessService.getAccessStatus(book.id))
       if (readerSession.current !== session) return
       setReader({ kind: 'book', book, loading: false, error: '', access: response.data })
     } catch {
@@ -154,9 +203,48 @@ const Consul = () => {
     }
   }
 
+  // Charge la version intégrale après l'aperçu, avec réessais automatiques.
+  // Utilisé à l'ouverture comme par le bouton « Réessayer l'intégrale ».
+  const loadFullCatalog = async () => {
+    const snap = catalogPreview.current
+    if (!snap) return
+    const session = ++readerSession.current
+    setReader((current) => current.kind === 'catalog' && current.document.id === snap.document.id
+      ? { ...current, fullLoading: true, fullError: false }
+      : current)
+    try {
+      const blob = await withRetry(() => catalogCirculationService.fetchFullBlob(snap.document.id), [600, 1200, 2400])
+      let fullUrl: string | null = null
+      let fullText: string | null = null
+      let fullTextUrl: string | null = null
+      if (snap.isPdf) {
+        fullUrl = URL.createObjectURL(blob)
+      } else {
+        fullText = await blob.text()
+        fullTextUrl = URL.createObjectURL(new Blob([fullText], { type: 'text/plain;charset=utf-8' }))
+      }
+      if (readerSession.current !== session) {
+        if (fullUrl) URL.revokeObjectURL(fullUrl)
+        if (fullTextUrl) URL.revokeObjectURL(fullTextUrl)
+        return
+      }
+      setReader((current) => current.kind === 'catalog' && current.document.id === snap.document.id
+        ? { ...current, fullLoading: false, fullError: false, fullUrl, fullText, fullTextUrl }
+        : current)
+    } catch {
+      if (readerSession.current !== session) return
+      // L'aperçu reste affiché : l'usager peut relancer l'intégrale en un tap.
+      setReader((current) => current.kind === 'catalog'
+        ? { ...current, fullLoading: false, fullError: true }
+        : current)
+    }
+  }
+
   const openCatalogReader = async (document: CatalogDocument) => {
     const session = ++readerSession.current
     pushReaderHistory()
+    setReaderRetry(0)
+    catalogPreview.current = null
     const isPdf = (document.contentType ?? '').toLowerCase().includes('pdf')
       || (document.name ?? '').toLowerCase().endsWith('.pdf')
     const baseReader = {
@@ -165,6 +253,7 @@ const Consul = () => {
       error: '',
       fullAccess: false,
       fullLoading: false,
+      fullError: false,
       isPdf,
       previewUrl: null as string | null,
       previewText: null as string | null,
@@ -174,15 +263,11 @@ const Consul = () => {
     }
     setReader({ ...baseReader, loading: true })
     const isStale = () => readerSession.current !== session
-    const revokeUrls = (previewUrl: string | null, fullUrl: string | null, fullTextUrl: string | null) => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl)
-      if (fullUrl) URL.revokeObjectURL(fullUrl)
-      if (fullTextUrl) URL.revokeObjectURL(fullTextUrl)
-    }
     try {
+      // Aperçu + droits avec réessais : un trou réseau ne doit plus casser l'ouverture.
       const [accessResult, previewResult] = await Promise.allSettled([
-        catalogCirculationService.getPublicAccess(document.id),
-        catalogCirculationService.fetchPreviewBlob(document.id),
+        withRetry(() => catalogCirculationService.getPublicAccess(document.id)),
+        withRetry(() => catalogCirculationService.fetchPreviewBlob(document.id)),
       ])
       if (previewResult.status !== 'fulfilled') throw new Error('preview')
       let previewUrl: string | null = null
@@ -193,35 +278,14 @@ const Consul = () => {
         previewText = await previewResult.value.text()
       }
       if (isStale()) {
-        revokeUrls(previewUrl, null, null)
+        if (previewUrl) URL.revokeObjectURL(previewUrl)
         return
       }
       const entitled = accessResult.status === 'fulfilled' && accessResult.value.data.fullAccess && user !== null
+      catalogPreview.current = { document, isPdf, previewUrl, previewText }
       setReader({ ...baseReader, loading: false, fullAccess: entitled, fullLoading: entitled, previewUrl, previewText })
       if (!entitled) return
-      try {
-        const blob = await catalogCirculationService.fetchFullBlob(document.id)
-        let fullUrl: string | null = null
-        let fullText: string | null = null
-        let fullTextUrl: string | null = null
-        if (isPdf) {
-          fullUrl = URL.createObjectURL(blob)
-        } else {
-          fullText = await blob.text()
-          fullTextUrl = URL.createObjectURL(new Blob([fullText], { type: 'text/plain;charset=utf-8' }))
-        }
-        if (isStale()) {
-          revokeUrls(previewUrl, fullUrl, fullTextUrl)
-          return
-        }
-        setReader({ ...baseReader, loading: false, fullAccess: true, fullLoading: false, previewUrl, previewText, fullUrl, fullText, fullTextUrl })
-      } catch {
-        if (isStale()) {
-          revokeUrls(previewUrl, null, null)
-          return
-        }
-        setReader((current) => current.kind === 'catalog' ? { ...current, fullLoading: false } : current)
-      }
+      await loadFullCatalog()
     } catch {
       if (isStale()) return
       setReader({ ...baseReader, loading: false, error: 'Lecture impossible pour ce catalogue.' })
@@ -357,9 +421,14 @@ const Consul = () => {
             ? 'Sans emprunt en cours, seule la fiche ouvrage est visible. Empruntez-le pour la lecture intégrale.'
             : undefined}
           onClose={closeReader}
-          actions={user
-            ? <Link to="/reservations" className="btn-primary min-h-[44px] w-full text-sm sm:w-auto">Réserver cet ouvrage</Link>
-            : <Link to="/login" className="btn-primary min-h-[44px] w-full text-sm sm:w-auto">Se connecter</Link>}
+          actions={<>
+            {!reader.loading && reader.error && (
+              <button type="button" onClick={() => void openBookReader(reader.book)} className="btn-primary min-h-[44px] w-full text-sm sm:w-auto">Réessayer</button>
+            )}
+            {user
+              ? <Link to="/reservations" className="btn-primary min-h-[44px] w-full text-sm sm:w-auto">Réserver cet ouvrage</Link>
+              : <Link to="/login" className="btn-primary min-h-[44px] w-full text-sm sm:w-auto">Se connecter</Link>}
+          </>}
         >
           {reader.loading && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement…</p>}
           {!reader.loading && reader.error && <Alert variant="error">{reader.error}</Alert>}
@@ -381,13 +450,21 @@ const Consul = () => {
           badgeVariant={reader.loading || reader.fullLoading ? 'warning' : reader.fullAccess && (reader.fullUrl || reader.fullText) ? 'success' : 'warning'}
           notice={!reader.loading && !reader.error && reader.fullLoading
             ? 'Aperçu affiché — la version intégrale charge en arrière-plan.'
-            : !reader.loading && !reader.fullAccess
-              ? (user
-                ? 'Sans emprunt en cours ni réservation disponible, seule la première page est visible.'
-                : 'Connectez-vous et empruntez ce catalogue pour lire l’intégralité.')
-              : undefined}
+            : !reader.loading && !reader.error && reader.fullError
+              ? 'La version intégrale n’a pas pu charger (réseau). L’aperçu reste visible — touchez « Réessayer l’intégrale ».'
+              : !reader.loading && !reader.fullAccess
+                ? (user
+                  ? 'Sans emprunt en cours ni réservation disponible, seule la première page est visible.'
+                  : 'Connectez-vous et empruntez ce catalogue pour lire l’intégralité.')
+                : undefined}
           onClose={closeReader}
           actions={<>
+            {!reader.loading && reader.error && (
+              <button type="button" onClick={() => void openCatalogReader(reader.document)} className="btn-primary min-h-[44px] w-full text-sm sm:w-auto">Réessayer</button>
+            )}
+            {!reader.loading && !reader.error && reader.fullError && (
+              <button type="button" onClick={() => void loadFullCatalog()} className="btn-primary min-h-[44px] w-full text-sm sm:w-auto">Réessayer l’intégrale</button>
+            )}
             {!reader.loading && !reader.fullAccess && (user
               ? <Link to={reader.document.available ? '/loans' : '/reservations'} className="btn-primary min-h-[44px] w-full text-sm sm:w-auto">
                   {reader.document.available ? 'Emprunter' : 'Réserver'}
@@ -407,6 +484,7 @@ const Consul = () => {
           {!reader.loading && reader.error && <Alert variant="error">{reader.error}</Alert>}
           {!reader.loading && !reader.error && (
             <ErrorBoundary
+              key={reader.kind === 'catalog' ? `${reader.document.id}-${readerRetry}` : `book-${readerRetry}`}
               fallback={
                 <div className="space-y-3">
                   <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
@@ -415,10 +493,10 @@ const Consul = () => {
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <button
                       type="button"
-                      onClick={() => window.location.reload()}
+                      onClick={() => setReaderRetry((k) => k + 1)}
                       className="btn-primary min-h-[44px] flex-1 text-sm"
                     >
-                      Recharger la page
+                      Réessayer
                     </button>
                     <button
                       type="button"
@@ -426,6 +504,13 @@ const Consul = () => {
                       className="btn-outline min-h-[44px] flex-1 text-sm"
                     >
                       Revenir au catalogue
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => window.location.reload()}
+                      className="btn-outline min-h-[44px] flex-1 text-sm"
+                    >
+                      Recharger la page
                     </button>
                   </div>
                 </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { bookService } from '../services/bookService'
 import { catalogCirculationService, type CatalogDocument, type CatalogDocumentReservation } from '../services/catalogCirculationService'
 import { reservationService } from '../services/reservationService'
@@ -105,7 +105,8 @@ const Reservations = () => {
     try { await catalogCirculationService.cancelReservation(id); setMessage('Réservation annulée.'); await reload() }
     catch { setMessage('Annulation impossible.') }
   }
-  const digitalColumns: TableColumn<CatalogDocumentReservation>[] = [
+  const userId = user?.id
+  const digitalColumns: TableColumn<CatalogDocumentReservation>[] = useMemo(() => [
     { key: 'document', label: 'Document', render: (item) => <span className="font-medium">{item.catalogDocumentName}</span> },
     ...(staff ? [{ key: 'user', label: 'Usager', render: (item: CatalogDocumentReservation) => item.userName } as TableColumn<CatalogDocumentReservation>] : []),
     {
@@ -124,14 +125,15 @@ const Reservations = () => {
         <div className="flex flex-wrap gap-3">
           {staff && item.status === 'WAITING' && <button type="button" onClick={() => void readyDocument(item.id)} className="text-sm font-medium text-primary-800 hover:underline">Rendre disponible</button>}
           {staff && item.status === 'READY_FOR_PICKUP' && <button type="button" onClick={() => void pickupDocument(item.id)} className="text-sm font-medium text-green-800 hover:underline">Confirmer récupération (→ prêt)</button>}
-          {!staff && item.status === 'WAITING' && item.userId === user?.id && <button type="button" onClick={() => void cancelDocument(item.id)} className="text-sm font-medium text-red-700 hover:underline">Annuler</button>}
-          {!staff && item.status === 'READY_FOR_PICKUP' && item.userId === user?.id && <><button type="button" onClick={() => void pickupDocument(item.id)} className="text-sm font-medium text-green-800 hover:underline">Récupérer (→ prêt)</button><button type="button" onClick={() => void cancelDocument(item.id)} className="text-sm font-medium text-red-700 hover:underline">Annuler</button></>}
+          {!staff && item.status === 'WAITING' && item.userId === userId && <button type="button" onClick={() => void cancelDocument(item.id)} className="text-sm font-medium text-red-700 hover:underline">Annuler</button>}
+          {!staff && item.status === 'READY_FOR_PICKUP' && item.userId === userId && <><button type="button" onClick={() => void pickupDocument(item.id)} className="text-sm font-medium text-green-800 hover:underline">Récupérer (→ prêt)</button><button type="button" onClick={() => void cancelDocument(item.id)} className="text-sm font-medium text-red-700 hover:underline">Annuler</button></>}
         </div>
       ),
     },
-  ]
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [staff, userId])
 
-  const bookColumns: TableColumn<Reservation>[] = [
+  const bookColumns: TableColumn<Reservation>[] = useMemo(() => [
     { key: 'book', label: 'Ouvrage', render: (item) => <span className="font-medium">{books.find(b => b.id === item.bookId)?.title ?? `Livre #${item.bookId}`}</span> },
     {
       key: 'status',
@@ -149,12 +151,13 @@ const Reservations = () => {
         <div className="flex flex-wrap gap-3">
           {staff && item.status === 'WAITING' && <button type="button" onClick={() => void ready(item.id)} className="text-sm font-medium text-primary-800 hover:underline">Rendre disponible</button>}
           {staff && item.status === 'READY_FOR_PICKUP' && <button type="button" onClick={() => void pickupBook(item.id)} className="text-sm font-medium text-green-800 hover:underline">Confirmer récupération (→ prêt)</button>}
-          {!staff && item.status === 'WAITING' && item.userId === user?.id && <button type="button" onClick={() => void cancelBook(item.id)} className="text-sm font-medium text-red-700 hover:underline">Annuler</button>}
-          {!staff && item.status === 'READY_FOR_PICKUP' && item.userId === user?.id && <><button type="button" onClick={() => void pickupBook(item.id)} className="text-sm font-medium text-green-800 hover:underline">Récupérer (→ prêt)</button><button type="button" onClick={() => void cancelBook(item.id)} className="text-sm font-medium text-red-700 hover:underline">Annuler</button></>}
+          {!staff && item.status === 'WAITING' && item.userId === userId && <button type="button" onClick={() => void cancelBook(item.id)} className="text-sm font-medium text-red-700 hover:underline">Annuler</button>}
+          {!staff && item.status === 'READY_FOR_PICKUP' && item.userId === userId && <><button type="button" onClick={() => void pickupBook(item.id)} className="text-sm font-medium text-green-800 hover:underline">Récupérer (→ prêt)</button><button type="button" onClick={() => void cancelBook(item.id)} className="text-sm font-medium text-red-700 hover:underline">Annuler</button></>}
         </div>
       ),
     },
-  ]
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [books, staff, userId])
 
   return <section className="page">
     <PageHeader

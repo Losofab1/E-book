@@ -35,7 +35,6 @@ const Catalog = () => {
   const canImport = user?.role === 'admin' || user?.role === 'bibliothecaire'
   const isAdmin = user?.role === 'admin'
   const MAX_SIZE = 25 * 1024 * 1024
-  const loading = loadingBooks || loadingDocs
 
   const download = useCallback(async (document: { id: number; name: string }) => {
     try { await catalogCirculationService.download(document.id, document.name) }

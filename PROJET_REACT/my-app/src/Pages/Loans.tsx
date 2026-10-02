@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { BookOpenText, CalendarClock, Check, Search, Undo2, UserRound, XCircle } from 'lucide-react'
 import { api } from '../services/api'
 import { bookService } from '../services/bookService'
@@ -47,9 +47,10 @@ const Loans = () => {
   const visibleItems = showAllLoans ? items : items.slice(0, 10)
   const visibleDocumentLoans = showAllDocumentLoans ? documentLoans : documentLoans.slice(0, 10)
   const loanTargetUserId = staff ? selectedDocumentUser : String(user?.id ?? '')
-  const hasActiveDocumentLoan = (catalogDocumentId: number) =>
+  const hasActiveDocumentLoan = useCallback((catalogDocumentId: number) =>
     loanTargetUserId !== '' && documentLoans.some((loan) =>
-      loan.catalogDocumentId === catalogDocumentId && loan.status === 'BORROWED' && String(loan.userId) === loanTargetUserId)
+      loan.catalogDocumentId === catalogDocumentId && loan.status === 'BORROWED' && String(loan.userId) === loanTargetUserId),
+  [loanTargetUserId, documentLoans])
 
   useEffect(() => {
     let cancelled = false
@@ -124,13 +125,13 @@ const Loans = () => {
     return () => { cancelled = true }
   }, [staff, refreshKey])
 
-  const availableBooks = books.filter(book => book.active !== false && book.availableCopies > 0)
+  const availableBooks = useMemo(() => books.filter(book => book.active !== false && book.availableCopies > 0), [books])
   const searchTerm = search.trim().toLocaleLowerCase('fr')
-  const filteredBooks = availableBooks.filter(book =>
-    [book.title, book.author, book.category].some(value => value?.toLocaleLowerCase('fr').includes(searchTerm))
-  )
-  const selectedBookDetails = books.find(book => String(book.id) === selectedBook)
-  const selectedDocumentDetails = documents.find(document => String(document.id) === selectedDocument)
+  const filteredBooks = useMemo(() => availableBooks.filter(book =>
+    [book.title, book.author, book.category].some(value => value?.toLocaleLowerCase('fr').includes(searchTerm)),
+  ), [availableBooks, searchTerm])
+  const selectedBookDetails = useMemo(() => books.find(book => String(book.id) === selectedBook), [books, selectedBook])
+  const selectedDocumentDetails = useMemo(() => documents.find(document => String(document.id) === selectedDocument), [documents, selectedDocument])
 
   const createBookLoan = async () => {
     if (!selectedBookUser || !selectedBook) {
@@ -152,7 +153,7 @@ const Loans = () => {
     }
   }
 
-  const bookStockColumns: TableColumn<Book>[] = [
+  const bookStockColumns: TableColumn<Book>[] = useMemo(() => [
     {
       key: 'title',
       label: 'Ouvrage',
@@ -181,7 +182,7 @@ const Loans = () => {
         )
       },
     },
-  ]
+  ], [selectedBook])
 
   const createDocumentLoan = async () => {
     if (!selectedDocumentUser || !selectedDocument) {
@@ -202,7 +203,7 @@ const Loans = () => {
     }
   }
 
-  const documentStockColumns: TableColumn<CatalogDocument>[] = [
+  const documentStockColumns: TableColumn<CatalogDocument>[] = useMemo(() => [
     {
       key: 'name',
       label: 'Catalogue',
@@ -253,7 +254,7 @@ const Loans = () => {
         )
       },
     },
-  ]
+  ], [selectedDocument, hasActiveDocumentLoan])
 
   const createOwnBookLoan = async () => {
     if (!user || !selectedBook) {
