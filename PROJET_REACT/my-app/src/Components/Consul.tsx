@@ -83,6 +83,11 @@ const Consul = () => {
   const [showAllDocuments, setShowAllDocuments] = useState(false)
   const [reader, setReader] = useState<Reader>({ kind: 'closed' })
   const [readerRetry, setReaderRetry] = useState(0)
+  // Bouton « Lire » en cours d'ouverture (spinner dessus, double-tap bloqué).
+  const [openingCatalogId, setOpeningCatalogId] = useState<number | null>(null)
+  const [openingBookId, setOpeningBookId] = useState<number | null>(null)
+  // Réseau lent : affiche un message de patience au lieu d'un écran figé.
+  const [readerSlow, setReaderSlow] = useState(false)
   const readerSession = useRef(0)
   const pdfPrefetched = useRef(false)
   // Aperçu courant : permet de relancer la version intégrale sans tout recharger.
@@ -135,9 +140,14 @@ const Consul = () => {
     readerSession.current += 1
     catalogPreview.current = null
     document.body.style.overflow = ''
+    // Retour direct au catalogue : on retire le hash sans toucher à l'historique.
+    // window.history.back() renvoyait parfois vers une autre page (Login, Accueil...).
     if (window.location.hash === '#lecture') {
-      window.history.back()
+      window.history.replaceState(null, '', window.location.pathname + window.location.search)
     }
+    setOpeningCatalogId(null)
+    setOpeningBookId(null)
+    setReaderSlow(false)
     setReader((current) => {
       if (current.kind === 'catalog') {
         if (current.previewUrl) URL.revokeObjectURL(current.previewUrl)
@@ -165,6 +175,19 @@ const Consul = () => {
     }
   }
 
+  // Si l'ouverture dure plus de 3,5 s, on affiche un message de patience
+  // (le flux réessaie déjà en silence) au lieu d'un écran figé.
+  useEffect(() => {
+    const waiting = reader.kind !== 'closed'
+      && (reader.kind === 'book' ? reader.loading : (reader.loading || reader.fullLoading))
+    if (!waiting) {
+      setReaderSlow(false)
+      return
+    }
+    const t = setTimeout(() => setReaderSlow(true), 3500)
+    return () => clearTimeout(t)
+  }, [reader])
+
   const term = debouncedSearch.trim().toLocaleLowerCase('fr')
   const filteredBooks = useMemo(() => {
     if (!term) return books
@@ -189,16 +212,21 @@ const Consul = () => {
   }, [search])
 
   const openBookReader = async (book: Book) => {
+    if (openingBookId === book.id) return
     const session = ++readerSession.current
     pushReaderHistory()
     setReaderRetry(0)
+    setReaderSlow(false)
+    setOpeningBookId(book.id)
     setReader({ kind: 'book', book, loading: true, error: '', access: null })
     try {
-      const response = await withRetry(() => digitalAccessService.getAccessStatus(book.id))
+      const response = await withRetry(() => digitalAccessService.getAccessStatus(book.id), [600, 1200, 2400])
       if (readerSession.current !== session) return
+      setOpeningBookId(null)
       setReader({ kind: 'book', book, loading: false, error: '', access: response.data })
     } catch {
       if (readerSession.current !== session) return
+      setOpeningBookId(null)
       setReader({ kind: 'book', book, loading: false, error: 'Statut de lecture indisponible.', access: null })
     }
   }
@@ -213,7 +241,7 @@ const Consul = () => {
       ? { ...current, fullLoading: true, fullError: false }
       : current)
     try {
-      const blob = await withRetry(() => catalogCirculationService.fetchFullBlob(snap.document.id), [600, 1200, 2400])
+      const blob = await withRetry(() => catalogCirculationService.fetchFullBlob(snap.document.id), [600, 1200, 2400, 4800])
       let fullUrl: string | null = null
       let fullText: string | null = null
       let fullTextUrl: string | null = null
@@ -241,9 +269,12 @@ const Consul = () => {
   }
 
   const openCatalogReader = async (document: CatalogDocument) => {
+    if (openingCatalogId === document.id) return
     const session = ++readerSession.current
     pushReaderHistory()
     setReaderRetry(0)
+    setReaderSlow(false)
+    setOpeningCatalogId(document.id)
     catalogPreview.current = null
     const isPdf = (document.contentType ?? '').toLowerCase().includes('pdf')
       || (document.name ?? '').toLowerCase().endsWith('.pdf')
@@ -266,8 +297,8 @@ const Consul = () => {
     try {
       // Aperçu + droits avec réessais : un trou réseau ne doit plus casser l'ouverture.
       const [accessResult, previewResult] = await Promise.allSettled([
-        withRetry(() => catalogCirculationService.getPublicAccess(document.id)),
-        withRetry(() => catalogCirculationService.fetchPreviewBlob(document.id)),
+        withRetry(() => catalogCirculationService.getPublicAccess(document.id), [600, 1200, 2400]),
+        withRetry(() => catalogCirculationService.fetchPreviewBlob(document.id), [600, 1200, 2400]),
       ])
       if (previewResult.status !== 'fulfilled') throw new Error('preview')
       let previewUrl: string | null = null
@@ -283,11 +314,15 @@ const Consul = () => {
       }
       const entitled = accessResult.status === 'fulfilled' && accessResult.value.data.fullAccess && user !== null
       catalogPreview.current = { document, isPdf, previewUrl, previewText }
+      // L'aperçu est lisible : le bouton « Lire » redevient normal,
+      // l'intégrale continue en arrière-plan.
+      setOpeningCatalogId(null)
       setReader({ ...baseReader, loading: false, fullAccess: entitled, fullLoading: entitled, previewUrl, previewText })
       if (!entitled) return
       await loadFullCatalog()
     } catch {
       if (isStale()) return
+      setOpeningCatalogId(null)
       setReader({ ...baseReader, loading: false, error: 'Lecture impossible pour ce catalogue.' })
     }
   }
@@ -354,7 +389,14 @@ const Consul = () => {
                   <p className="mt-2 text-slate-700">{book.author}</p>
                   <p className="mt-4 border-t border-slate-100 pt-4 text-sm text-slate-600">{book.category} · {book.availableCopies} disponible(s)</p>
                   <div className="mt-4 flex flex-wrap items-center gap-3">
-                    <button type="button" onClick={() => void openBookReader(book)} className="btn-outline px-3 py-1.5 text-sm">Lire</button>
+                    <button
+                      type="button"
+                      onClick={() => void openBookReader(book)}
+                      disabled={openingBookId === book.id}
+                      className="btn-outline px-3 py-1.5 text-sm disabled:cursor-wait disabled:opacity-60"
+                    >
+                      {openingBookId === book.id ? 'Ouverture…' : 'Lire'}
+                    </button>
                     {user
                       ? <Link to="/reservations" className="text-sm font-semibold text-primary-800 hover:underline">Réserver cet ouvrage</Link>
                       : <Link to="/login" className="text-sm font-semibold text-primary-800 hover:underline">Se connecter pour réserver</Link>}
@@ -393,7 +435,14 @@ const Consul = () => {
                       {document.available
                         ? <StatusBadge label="Disponible" variant="success" />
                         : <StatusBadge label="Emprunté" variant="warning" />}
-                      <button type="button" onClick={() => void openCatalogReader(document)} className="btn-outline min-h-[44px] flex-1 px-4 py-2 text-sm sm:flex-none">Lire</button>
+                      <button
+                        type="button"
+                        onClick={() => void openCatalogReader(document)}
+                        disabled={openingCatalogId === document.id}
+                        className="btn-outline min-h-[44px] flex-1 px-4 py-2 text-sm disabled:cursor-wait disabled:opacity-60 sm:flex-none"
+                      >
+                        {openingCatalogId === document.id ? 'Ouverture…' : 'Lire'}
+                      </button>
                       {user
                         ? <Link to={document.available ? '/loans' : '/reservations'} className="min-h-[44px] py-2 text-sm font-semibold text-primary-800 hover:underline">
                             {document.available ? 'Emprunter' : 'Réserver'}
@@ -430,7 +479,7 @@ const Consul = () => {
               : <Link to="/login" className="btn-primary min-h-[44px] w-full text-sm sm:w-auto">Se connecter</Link>}
           </>}
         >
-          {reader.loading && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement…</p>}
+          {reader.loading && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement…{readerSlow ? ' Connexion lente — nouvelles tentatives automatiques en cours.' : ''}</p>}
           {!reader.loading && reader.error && <Alert variant="error">{reader.error}</Alert>}
           {!reader.loading && !reader.error && reader.access && (
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
@@ -449,7 +498,9 @@ const Consul = () => {
           badgeLabel={reader.loading ? 'Chargement…' : reader.fullLoading ? 'Intégrale en cours…' : reader.fullAccess && (reader.fullUrl || reader.fullText) ? 'Lecture intégrale' : 'Aperçu — première page'}
           badgeVariant={reader.loading || reader.fullLoading ? 'warning' : reader.fullAccess && (reader.fullUrl || reader.fullText) ? 'success' : 'warning'}
           notice={!reader.loading && !reader.error && reader.fullLoading
-            ? 'Aperçu affiché — la version intégrale charge en arrière-plan.'
+            ? (readerSlow
+              ? 'Aperçu affiché — connexion lente, nouvelles tentatives automatiques en cours pour l’intégrale.'
+              : 'Aperçu affiché — la version intégrale charge en arrière-plan.')
             : !reader.loading && !reader.error && reader.fullError
               ? 'La version intégrale n’a pas pu charger (réseau). L’aperçu reste visible — touchez « Réessayer l’intégrale ».'
               : !reader.loading && !reader.fullAccess
@@ -480,7 +531,7 @@ const Consul = () => {
             )}
           </>}
         >
-          {reader.loading && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement…</p>}
+          {reader.loading && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement…{readerSlow ? ' Connexion lente — nouvelles tentatives automatiques en cours.' : ''}</p>}
           {!reader.loading && reader.error && <Alert variant="error">{reader.error}</Alert>}
           {!reader.loading && !reader.error && (
             <ErrorBoundary
