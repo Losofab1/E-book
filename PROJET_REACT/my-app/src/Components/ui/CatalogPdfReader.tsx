@@ -23,7 +23,9 @@ const CatalogPdfReader = ({ url, title }: CatalogPdfReaderProps) => {
   const [zoom, setZoom] = useState(1)
   const [loading, setLoading] = useState(true)
   const [rendering, setRendering] = useState(false)
-  const [error, setError] = useState('')
+  // En cas de PDF illisible par le moteur avancé, on bascule
+  // automatiquement sur le lecteur natif : aucun écran d'erreur.
+  const [useNative, setUseNative] = useState(false)
   const [scrollWidth, setScrollWidth] = useState(0)
 
   useEffect(() => {
@@ -41,7 +43,7 @@ const CatalogPdfReader = ({ url, title }: CatalogPdfReaderProps) => {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    setError('')
+    setUseNative(false)
     setNumPages(0)
     setPage(1)
     pdfjsLib
@@ -57,7 +59,7 @@ const CatalogPdfReader = ({ url, title }: CatalogPdfReaderProps) => {
       })
       .catch(() => {
         if (!cancelled) {
-          setError('PDF illisible sur ce téléphone. Essayez « Ouvrir » ou le téléchargement.')
+          setUseNative(true)
           setLoading(false)
         }
       })
@@ -99,11 +101,9 @@ const CatalogPdfReader = ({ url, title }: CatalogPdfReaderProps) => {
         }
         pdfPage.cleanup()
         if (!cancelled) setRendering(false)
-      } catch (error) {
+      } catch {
         if (!cancelled) {
-          if ((error as Error)?.name !== 'RenderingCancelledException') {
-            setError('Page illisible. Changez de page ou ouvrez le PDF dans le navigateur.')
-          }
+          setUseNative(true)
           setRendering(false)
         }
       }
@@ -140,13 +140,10 @@ const CatalogPdfReader = ({ url, title }: CatalogPdfReaderProps) => {
     )
   }
 
-  if (error && numPages === 0) {
+  if (useNative) {
     return (
-      <div className="space-y-3">
-        <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</p>
-        <a href={url} target="_blank" rel="noreferrer" className="btn-outline min-h-[44px] w-full text-sm">
-          <ExternalLink size={16} /> Ouvrir dans le navigateur
-        </a>
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <iframe src={url} title={title} className="h-[62dvh] w-full sm:h-[68vh]" />
       </div>
     )
   }
@@ -218,7 +215,6 @@ const CatalogPdfReader = ({ url, title }: CatalogPdfReaderProps) => {
           </a>
         </div>
       </div>
-      {error && <p className="bg-red-50 px-3 py-2 text-[13px] text-red-800">{error}</p>}
       <div ref={scrollRef} className="max-h-[62dvh] overflow-auto bg-slate-50 p-2 sm:max-h-[68vh] sm:p-3">
         <div className="mx-auto w-fit">
           <canvas ref={canvasRef} className="max-w-full rounded-lg bg-white shadow" role="img" aria-label={`Page ${page} de ${title}`} />

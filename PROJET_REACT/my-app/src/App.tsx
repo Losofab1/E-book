@@ -1,4 +1,5 @@
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
 import Footers from './Components/footers.tsx'
 import NavBar from './Components/NavBar.tsx'
 import Home from './Pages/Home.tsx'
@@ -31,18 +32,40 @@ const NotFound = () => (
   </section>
 )
 
-const PageCrash = () => (
-  <section className="page">
-    <div className="card mx-auto mt-6 max-w-xl text-center">
-      <h1 className="text-2xl font-bold">Une erreur d’affichage est survenue</h1>
-      <p className="mt-2 text-sm text-slate-600">Revenez au catalogue : aucune donnée n’est perdue.</p>
-      <div className="mt-4 flex flex-col justify-center gap-2 sm:flex-row">
-        <Link to="/consulter" className="btn-primary min-h-[44px] flex-1 text-sm">Retour au catalogue</Link>
-        <Link to="/" className="btn-outline min-h-[44px] flex-1 text-sm">Accueil</Link>
+const PageCrash = () => {
+  // Dernier filet : au lieu d'une page d'erreur bloquante, on ramène
+  // automatiquement à l'accueil (une seule fois, anti-boucle).
+  const navigate = useNavigate()
+  const location = useLocation()
+  useEffect(() => {
+    if (location.pathname === '/') return
+    try {
+      if (sessionStorage.getItem('losofab_crash_rescue') === '1') return
+      sessionStorage.setItem('losofab_crash_rescue', '1')
+    } catch {
+      /* stockage indisponible */
+    }
+    navigate('/', { replace: true })
+  }, [location.pathname, navigate])
+  useEffect(() => {
+    try {
+      sessionStorage.removeItem('losofab_crash_rescue')
+    } catch {
+      /* stockage indisponible */
+    }
+  }, [location.pathname])
+  return (
+    <section className="page">
+      <div className="card mx-auto mt-6 max-w-xl text-center">
+        <h1 className="text-2xl font-bold">Un instant…</h1>
+        <p className="mt-2 text-sm text-slate-600">Retour à l’accueil en cours.</p>
+        <div className="mt-4 flex justify-center">
+          <Link to="/" className="btn-primary min-h-[44px] px-8 text-sm">Accueil</Link>
+        </div>
       </div>
-    </div>
-  </section>
-)
+    </section>
+  )
+}
 
 const AppRoutes = () => {
   // La barrière se réarme à chaque navigation : fini le cul-de-sac qui

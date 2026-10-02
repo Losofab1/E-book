@@ -46,7 +46,15 @@ function lazyPdfReader() {
   }))
 }
 
-/** Précharge le lecteur PDF (voir effet plus bas). */
+/** Afficheur PDF natif du navigateur : repli silencieux quand le lecteur
+ * avancé ne peut pas se charger. Le catalogue s'affiche quand même. */
+const NativePdfViewer = ({ url, title }: { url: string; title: string }) => (
+  <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <iframe src={url} title={title} className="h-[62dvh] w-full sm:h-[68vh]" />
+  </div>
+)
+
+/** Précharge le lecteur PDF quand le navigateur est inactif. */
 const warmPdfReader = () => {
   void import('./ui/CatalogPdfReader').catch(() => undefined)
 }
@@ -62,7 +70,6 @@ type CatalogReader = {
   error: string
   fullAccess: boolean
   fullLoading: boolean
-  fullError: boolean
   isPdf: boolean
   previewUrl: string | null
   previewText: string | null
@@ -85,15 +92,12 @@ const Consul = () => {
   const [showAllBooks, setShowAllBooks] = useState(false)
   const [showAllDocuments, setShowAllDocuments] = useState(false)
   const [reader, setReader] = useState<Reader>({ kind: 'closed' })
-  // Lecteur PDF en chargement différé : recréé à chaque nouvel essai car
+  // Lecteur PDF en chargement différé : recréé à chaque ouverture car
   // React mémorise un import rejeté et le rejoue en échec sans retélécharger.
   const [PdfReader, setPdfReader] = useState(() => lazyPdfReader())
-  const [readerRetry, setReaderRetry] = useState(0)
   // Bouton « Lire » en cours d'ouverture (spinner dessus, double-tap bloqué).
   const [openingCatalogId, setOpeningCatalogId] = useState<number | null>(null)
   const [openingBookId, setOpeningBookId] = useState<number | null>(null)
-  // Réseau lent : affiche un message de patience au lieu d'un écran figé.
-  const [readerSlow, setReaderSlow] = useState(false)
   const readerSession = useRef(0)
   const pdfPrefetched = useRef(false)
   // Aperçu courant : permet de relancer la version intégrale sans tout recharger.
@@ -122,9 +126,9 @@ const Consul = () => {
     return () => { cancelled = true }
   }, [])
 
-  // Précharge le lecteur PDF quand le navigateur est inactif : sur téléphone,
-  // télécharger ses ~485 Ko au moment du « Lire » échoue souvent et affichait
-  // « le lecteur n'a pas pu s'afficher ». Sauf mode économiseur de données.
+  // Précharge le lecteur PDF quand le navigateur est inactif : le tap
+  // sur « Lire » trouve le code déjà en cache, même sur téléphone.
+  // Sauf mode économiseur de données.
   useEffect(() => {
     if (loading || pdfPrefetched.current) return
     const hasPdf = documents.some((d) => (d.contentType ?? '').toLowerCase().includes('pdf')
@@ -153,7 +157,6 @@ const Consul = () => {
     }
     setOpeningCatalogId(null)
     setOpeningBookId(null)
-    setReaderSlow(false)
     setReader((current) => {
       if (current.kind === 'catalog') {
         if (current.previewUrl) URL.revokeObjectURL(current.previewUrl)
@@ -180,19 +183,6 @@ const Consul = () => {
       window.history.pushState(null, '', '#lecture')
     }
   }
-
-  // Si l'ouverture dure plus de 3,5 s, on affiche un message de patience
-  // (le flux réessaie déjà en silence) au lieu d'un écran figé.
-  useEffect(() => {
-    const waiting = reader.kind !== 'closed'
-      && (reader.kind === 'book' ? reader.loading : (reader.loading || reader.fullLoading))
-    if (!waiting) {
-      setReaderSlow(false)
-      return
-    }
-    const t = setTimeout(() => setReaderSlow(true), 3500)
-    return () => clearTimeout(t)
-  }, [reader])
 
   const term = debouncedSearch.trim().toLocaleLowerCase('fr')
   const filteredBooks = useMemo(() => {
@@ -221,8 +211,6 @@ const Consul = () => {
     if (openingBookId === book.id) return
     const session = ++readerSession.current
     pushReaderHistory()
-    setReaderRetry(0)
-    setReaderSlow(false)
     setOpeningBookId(book.id)
     setReader({ kind: 'book', book, loading: true, error: '', access: null })
     try {
@@ -233,18 +221,19 @@ const Consul = () => {
     } catch {
       if (readerSession.current !== session) return
       setOpeningBookId(null)
-      setReader({ kind: 'book', book, loading: false, error: 'Statut de lecture indisponible.', access: null })
+      // Pas d'écran d'erreur : la fiche reste consultable sans le statut d'accès.
+      setReader({ kind: 'book', book, loading: false, error: '', access: null })
     }
   }
 
-  // Charge la version intégrale après l'aperçu, avec réessais automatiques.
-  // Utilisé à l'ouverture comme par le bouton « Réessayer l'intégrale ».
+  // Charge la version intégrale après l'aperçu, en silence.
+  // En cas d'échec persistant, l'aperçu reste affiché, sans erreur ni bouton.
   const loadFullCatalog = async () => {
     const snap = catalogPreview.current
     if (!snap) return
     const session = ++readerSession.current
     setReader((current) => current.kind === 'catalog' && current.document.id === snap.document.id
-      ? { ...current, fullLoading: true, fullError: false }
+      ? { ...current, fullLoading: true }
       : current)
     try {
       const blob = await withRetry(() => catalogCirculationService.fetchFullBlob(snap.document.id), [600, 1200, 2400, 4800])
@@ -263,13 +252,12 @@ const Consul = () => {
         return
       }
       setReader((current) => current.kind === 'catalog' && current.document.id === snap.document.id
-        ? { ...current, fullLoading: false, fullError: false, fullUrl, fullText, fullTextUrl }
+        ? { ...current, fullLoading: false, fullUrl, fullText, fullTextUrl }
         : current)
     } catch {
       if (readerSession.current !== session) return
-      // L'aperçu reste affiché : l'usager peut relancer l'intégrale en un tap.
       setReader((current) => current.kind === 'catalog'
-        ? { ...current, fullLoading: false, fullError: true }
+        ? { ...current, fullLoading: false }
         : current)
     }
   }
@@ -278,9 +266,7 @@ const Consul = () => {
     if (openingCatalogId === document.id) return
     const session = ++readerSession.current
     pushReaderHistory()
-    setReaderRetry(0)
     setPdfReader(lazyPdfReader())
-    setReaderSlow(false)
     setOpeningCatalogId(document.id)
     catalogPreview.current = null
     const isPdf = (document.contentType ?? '').toLowerCase().includes('pdf')
@@ -291,7 +277,6 @@ const Consul = () => {
       error: '',
       fullAccess: false,
       fullLoading: false,
-      fullError: false,
       isPdf,
       previewUrl: null as string | null,
       previewText: null as string | null,
@@ -329,8 +314,14 @@ const Consul = () => {
       await loadFullCatalog()
     } catch {
       if (isStale()) return
+      // Échec persistant : pas d'écran d'erreur. On referme proprement,
+      // le bouton « Lire » redevient normal pour un nouvel essai plus tard.
       setOpeningCatalogId(null)
-      setReader({ ...baseReader, loading: false, error: 'Lecture impossible pour ce catalogue.' })
+      catalogPreview.current = null
+      if (window.location.hash === '#lecture') {
+        window.history.replaceState(null, '', window.location.pathname + window.location.search)
+      }
+      setReader({ kind: 'closed' })
     }
   }
 
@@ -473,27 +464,25 @@ const Consul = () => {
           title={reader.book.title}
           badgeLabel={reader.loading ? 'Chargement…' : reader.access?.fullAccess ? 'Lecture intégrale' : 'Aperçu'}
           badgeVariant={reader.access?.fullAccess ? 'success' : 'warning'}
-          notice={reader.access && !reader.access.fullAccess
-            ? 'Sans emprunt en cours, seule la fiche ouvrage est visible. Empruntez-le pour la lecture intégrale.'
-            : undefined}
+          notice={!reader.loading && !reader.access
+            ? 'Statut d’accès momentanément indisponible — la fiche reste consultable.'
+            : reader.access && !reader.access.fullAccess
+              ? 'Sans emprunt en cours, seule la fiche ouvrage est visible. Empruntez-le pour la lecture intégrale.'
+              : undefined}
           onClose={closeReader}
           actions={<>
-            {!reader.loading && reader.error && (
-              <button type="button" onClick={() => void openBookReader(reader.book)} className="btn-primary min-h-[44px] w-full text-sm sm:w-auto">Réessayer</button>
-            )}
             {user
               ? <Link to="/reservations" className="btn-primary min-h-[44px] w-full text-sm sm:w-auto">Réserver cet ouvrage</Link>
               : <Link to="/login" className="btn-primary min-h-[44px] w-full text-sm sm:w-auto">Se connecter</Link>}
           </>}
         >
-          {reader.loading && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement…{readerSlow ? ' Connexion lente — nouvelles tentatives automatiques en cours.' : ''}</p>}
-          {!reader.loading && reader.error && <Alert variant="error">{reader.error}</Alert>}
-          {!reader.loading && !reader.error && reader.access && (
+          {reader.loading && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement…</p>}
+          {!reader.loading && (
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
               <div className="card"><dt className="text-slate-600">Auteur</dt><dd className="mt-1 font-semibold">{reader.book.author}</dd></div>
               <div className="card"><dt className="text-slate-600">Catégorie</dt><dd className="mt-1 font-semibold">{reader.book.category}</dd></div>
               <div className="card"><dt className="text-slate-600">Disponibilité</dt><dd className="mt-1 font-semibold">{reader.book.availableCopies} exemplaire(s)</dd></div>
-              <div className="card"><dt className="text-slate-600">Statut d’accès</dt><dd className="mt-1 font-semibold">{reader.access.message}</dd></div>
+              {reader.access && <div className="card"><dt className="text-slate-600">Statut d’accès</dt><dd className="mt-1 font-semibold">{reader.access.message}</dd></div>}
             </dl>
           )}
         </ReaderModal>
@@ -504,25 +493,15 @@ const Consul = () => {
           title={reader.document.name}
           badgeLabel={reader.loading ? 'Chargement…' : reader.fullAccess ? 'Lecture intégrale' : 'Aperçu — première page'}
           badgeVariant={reader.loading ? 'warning' : reader.fullAccess ? 'success' : 'warning'}
-          notice={!reader.loading && !reader.error && reader.fullLoading
-            ? (readerSlow
-              ? 'Aperçu affiché — connexion lente, nouvelles tentatives automatiques en cours pour l’intégrale.'
-              : 'Aperçu affiché — la version intégrale charge en arrière-plan.')
-            : !reader.loading && !reader.error && reader.fullError
-              ? 'La version intégrale n’a pas pu charger (réseau). L’aperçu reste visible — touchez « Réessayer l’intégrale ».'
-              : !reader.loading && !reader.fullAccess
-                ? (user
-                  ? 'Sans emprunt en cours ni réservation disponible, seule la première page est visible.'
-                  : 'Connectez-vous et empruntez ce catalogue pour lire l’intégralité.')
-                : undefined}
+          notice={!reader.loading && reader.fullLoading
+            ? 'Aperçu affiché — la version intégrale charge en arrière-plan.'
+            : !reader.loading && !reader.fullAccess
+              ? (user
+                ? 'Sans emprunt en cours ni réservation disponible, seule la première page est visible.'
+                : 'Connectez-vous et empruntez ce catalogue pour lire l’intégralité.')
+              : undefined}
           onClose={closeReader}
           actions={<>
-            {!reader.loading && reader.error && (
-              <button type="button" onClick={() => void openCatalogReader(reader.document)} className="btn-primary min-h-[44px] w-full text-sm sm:w-auto">Réessayer</button>
-            )}
-            {!reader.loading && !reader.error && reader.fullError && (
-              <button type="button" onClick={() => void loadFullCatalog()} className="btn-primary min-h-[44px] w-full text-sm sm:w-auto">Réessayer l’intégrale</button>
-            )}
             {!reader.loading && !reader.fullAccess && (user
               ? <Link to={reader.document.available ? '/loans' : '/reservations'} className="btn-primary min-h-[44px] w-full text-sm sm:w-auto">
                   {reader.document.available ? 'Emprunter' : 'Réserver'}
@@ -538,42 +517,15 @@ const Consul = () => {
             )}
           </>}
         >
-          {reader.loading && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement…{readerSlow ? ' Connexion lente — nouvelles tentatives automatiques en cours.' : ''}</p>}
-          {!reader.loading && reader.error && <Alert variant="error">{reader.error}</Alert>}
-          {!reader.loading && !reader.error && (
+          {reader.loading && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement…</p>}
+          {!reader.loading && (
             <ErrorBoundary
-              key={reader.kind === 'catalog' ? `${reader.document.id}-${readerRetry}` : `book-${readerRetry}`}
-              resetKey={reader.kind === 'catalog' ? `${reader.document.id}-${readerRetry}` : `book-${readerRetry}`}
-              fallback={
-                <div className="space-y-3">
-                  <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-                    Le lecteur n’a pas pu s’afficher (connexion instable ou application mise à jour).
-                  </p>
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <button
-                      type="button"
-                      onClick={() => { setPdfReader(lazyPdfReader()); setReaderRetry((k) => k + 1) }}
-                      className="btn-primary min-h-[44px] flex-1 text-sm"
-                    >
-                      Réessayer
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => closeReader()}
-                      className="btn-outline min-h-[44px] flex-1 text-sm"
-                    >
-                      Revenir au catalogue
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => window.location.reload()}
-                      className="btn-outline min-h-[44px] flex-1 text-sm"
-                    >
-                      Recharger la page
-                    </button>
-                  </div>
-                </div>
-              }
+              key={`catalog-${reader.document.id}`}
+              resetKey={`catalog-${reader.document.id}`}
+              fallback={(() => {
+                const nativeUrl = reader.fullUrl ?? reader.previewUrl ?? ''
+                return nativeUrl ? <NativePdfViewer url={nativeUrl} title={reader.document.name} /> : null
+              })()}
             >
               {reader.isPdf ? (
                 <Suspense fallback={<p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement du lecteur PDF…</p>}>
