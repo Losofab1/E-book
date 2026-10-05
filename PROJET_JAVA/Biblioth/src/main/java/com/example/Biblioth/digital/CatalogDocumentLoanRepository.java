@@ -12,6 +12,8 @@ public interface CatalogDocumentLoanRepository extends JpaRepository<CatalogDocu
     boolean existsByUserIdAndCatalogDocumentIdAndStatus(Long userId, Long catalogDocumentId, PhysicalLoanStatus status);
     long countByCatalogDocumentIdAndStatus(Long catalogDocumentId, PhysicalLoanStatus status);
     void deleteByCatalogDocumentId(Long catalogDocumentId);
+    boolean existsByCatalogDocumentIdAndUserEmailIgnoreCaseAndStatusAndDueAtAfter(
+            Long catalogDocumentId, String userEmail, PhysicalLoanStatus status, java.time.LocalDateTime now);
     Optional<CatalogDocumentLoan> findFirstByCatalogDocumentIdAndStatusOrderByDueAtDesc(Long catalogDocumentId, PhysicalLoanStatus status);
     List<CatalogDocumentLoan> findByUserIdOrderByBorrowedAtDesc(Long userId);
     List<CatalogDocumentLoan> findAllByOrderByBorrowedAtDesc();

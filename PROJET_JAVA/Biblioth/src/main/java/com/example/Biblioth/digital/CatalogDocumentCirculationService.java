@@ -330,11 +330,14 @@ public class CatalogDocumentCirculationService {
         if (authentication == null || authentication instanceof AnonymousAuthenticationToken || !authentication.isAuthenticated()) return false;
         if (isStaff(authentication)) return true;
         LocalDateTime now = LocalDateTime.now();
-        return loanRepository.findFirstByCatalogDocumentIdAndStatusOrderByDueAtDesc(documentId, PhysicalLoanStatus.BORROWED)
-                .filter(loan -> loan.getUser().getEmail().equalsIgnoreCase(authentication.getName()) && loan.getDueAt().isAfter(now))
-                .isPresent()
-                || reservationRepository.existsByCatalogDocumentIdAndUserEmailAndStatusAndPickupDeadlineAfter(
-                        documentId, authentication.getName(), ReservationStatus.READY_FOR_PICKUP, now);
+        // Un catalogue a jusqu'à 10 exemplaires : il faut vérifier le prêt
+        // de l'usager connecté, pas seulement le dernier prêt toutes copies.
+        if (loanRepository.existsByCatalogDocumentIdAndUserEmailIgnoreCaseAndStatusAndDueAtAfter(
+                documentId, authentication.getName(), PhysicalLoanStatus.BORROWED, now)) {
+            return true;
+        }
+        return reservationRepository.existsByCatalogDocumentIdAndUserEmailAndStatusAndPickupDeadlineAfter(
+                documentId, authentication.getName(), ReservationStatus.READY_FOR_PICKUP, now);
     }
 
     @Transactional(readOnly = true)

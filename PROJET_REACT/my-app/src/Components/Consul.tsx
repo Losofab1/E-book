@@ -70,6 +70,7 @@ type CatalogReader = {
   error: string
   fullAccess: boolean
   fullLoading: boolean
+  fullError: boolean
   isPdf: boolean
   previewUrl: string | null
   previewText: string | null
@@ -227,13 +228,14 @@ const Consul = () => {
   }
 
   // Charge la version intégrale après l'aperçu, en silence.
-  // En cas d'échec persistant, l'aperçu reste affiché, sans erreur ni bouton.
-  const loadFullCatalog = async () => {
+  // En cas d'échec, fullError passe à vrai et un bouton de relance
+  // apparaît : on ne reste plus bloqué sur l'aperçu sans explication.
+  const loadFullCatalog = async (session?: number) => {
     const snap = catalogPreview.current
     if (!snap) return
-    const session = ++readerSession.current
+    const currentSession = session ?? readerSession.current
     setReader((current) => current.kind === 'catalog' && current.document.id === snap.document.id
-      ? { ...current, fullLoading: true }
+      ? { ...current, fullLoading: true, fullError: false }
       : current)
     try {
       const blob = await withRetry(() => catalogCirculationService.fetchFullBlob(snap.document.id), [600, 1200, 2400, 4800])
@@ -246,20 +248,24 @@ const Consul = () => {
         fullText = await blob.text()
         fullTextUrl = URL.createObjectURL(new Blob([fullText], { type: 'text/plain;charset=utf-8' }))
       }
-      if (readerSession.current !== session) {
+      if (readerSession.current !== currentSession) {
         if (fullUrl) URL.revokeObjectURL(fullUrl)
         if (fullTextUrl) URL.revokeObjectURL(fullTextUrl)
         return
       }
       setReader((current) => current.kind === 'catalog' && current.document.id === snap.document.id
-        ? { ...current, fullLoading: false, fullUrl, fullText, fullTextUrl }
+        ? { ...current, fullLoading: false, fullError: false, fullUrl, fullText, fullTextUrl }
         : current)
     } catch {
-      if (readerSession.current !== session) return
+      if (readerSession.current !== currentSession) return
       setReader((current) => current.kind === 'catalog'
-        ? { ...current, fullLoading: false }
+        ? { ...current, fullLoading: false, fullError: true }
         : current)
     }
+  }
+
+  const retryFullCatalog = () => {
+    void loadFullCatalog()
   }
 
   const openCatalogReader = async (document: CatalogDocument) => {
@@ -277,6 +283,7 @@ const Consul = () => {
       error: '',
       fullAccess: false,
       fullLoading: false,
+      fullError: false,
       isPdf,
       previewUrl: null as string | null,
       previewText: null as string | null,
@@ -309,9 +316,9 @@ const Consul = () => {
       // L'aperçu est lisible : le bouton « Lire » redevient normal,
       // l'intégrale continue en arrière-plan.
       setOpeningCatalogId(null)
-      setReader({ ...baseReader, loading: false, fullAccess: entitled, fullLoading: entitled, previewUrl, previewText })
+      setReader({ ...baseReader, loading: false, fullAccess: entitled, fullLoading: entitled, fullError: false, previewUrl, previewText })
       if (!entitled) return
-      await loadFullCatalog()
+      await loadFullCatalog(session)
     } catch {
       if (isStale()) return
       // Échec persistant : pas d'écran d'erreur. On referme proprement,
@@ -491,17 +498,30 @@ const Consul = () => {
       {reader.kind === 'catalog' && (
         <ReaderModal
           title={reader.document.name}
-          badgeLabel={reader.loading ? 'Chargement…' : reader.fullAccess ? 'Lecture intégrale' : 'Aperçu — première page'}
-          badgeVariant={reader.loading ? 'warning' : reader.fullAccess ? 'success' : 'warning'}
-          notice={!reader.loading && reader.fullLoading
-            ? 'Aperçu affiché — la version intégrale charge en arrière-plan.'
-            : !reader.loading && !reader.fullAccess
-              ? (user
-                ? 'Sans emprunt en cours ni réservation disponible, seule la première page est visible.'
-                : 'Connectez-vous et empruntez ce catalogue pour lire l’intégralité.')
-              : undefined}
+          badgeLabel={reader.loading
+            ? 'Chargement…'
+            : (reader.fullUrl ?? reader.fullText) != null
+              ? 'Lecture intégrale'
+              : reader.fullAccess ? 'Aperçu — intégrale en cours' : 'Aperçu — première page'}
+          badgeVariant={reader.loading
+            ? 'warning'
+            : (reader.fullUrl ?? reader.fullText) != null ? 'success' : 'warning'}
+          notice={!reader.loading && reader.fullError
+            ? 'La version intégrale n’a pas pu charger (prêt actif requis, réseau instable). L’aperçu reste visible — relancez le chargement.'
+            : !reader.loading && reader.fullLoading
+              ? 'Aperçu affiché — la version intégrale (toutes les pages) charge en arrière-plan.'
+              : !reader.loading && !reader.fullAccess
+                ? (user
+                  ? 'Sans emprunt en cours ni réservation disponible, seule la première page est visible.'
+                  : 'Connectez-vous et empruntez ce catalogue pour lire l’intégralité.')
+                : undefined}
           onClose={closeReader}
           actions={<>
+            {!reader.loading && reader.fullError && (
+              <button type="button" onClick={retryFullCatalog} className="btn-primary min-h-[44px] w-full text-sm sm:w-auto">
+                Recharger la version intégrale
+              </button>
+            )}
             {!reader.loading && !reader.fullAccess && (user
               ? <Link to={reader.document.available ? '/loans' : '/reservations'} className="btn-primary min-h-[44px] w-full text-sm sm:w-auto">
                   {reader.document.available ? 'Emprunter' : 'Réserver'}

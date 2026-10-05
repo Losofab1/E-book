@@ -44,7 +44,9 @@ const CatalogPdfReader = ({ url, title }: CatalogPdfReaderProps) => {
     let cancelled = false
     setLoading(true)
     setUseNative(false)
-    setNumPages(0)
+    // On garde l'ancien nombre de pages pendant le basculement
+    // aperçu → intégrale : pas d'écran blanc, l'aperçu reste visible
+    // avec un bandeau de chargement au lieu d'un flash.
     setPage(1)
     pdfjsLib
       .getDocument({ url, withCredentials: false })
@@ -132,7 +134,7 @@ const CatalogPdfReader = ({ url, title }: CatalogPdfReaderProps) => {
     )
   }
 
-  if (loading) {
+  if (loading && numPages === 0) {
     return (
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600" role="status">
         Chargement du PDF optimisé mobile…
@@ -150,6 +152,11 @@ const CatalogPdfReader = ({ url, title }: CatalogPdfReaderProps) => {
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      {loading && numPages > 0 && (
+        <p className="border-b border-primary-100 bg-primary-50 px-3 py-2 text-[13px] font-medium text-primary-900" role="status">
+          Version intégrale en cours de chargement — toutes les pages arrivent…
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-2 py-2">
         <div className="flex items-center gap-1">
           <button
