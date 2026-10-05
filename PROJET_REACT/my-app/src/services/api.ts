@@ -4,6 +4,8 @@ const rawBase = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'htt
 const cleanBase = rawBase.trim().replace(/^\/+/, '').replace(/\/+$/, '')
 const finalBase = cleanBase.endsWith('/api') ? cleanBase : `${cleanBase}/api`
 
+export const apiBaseUrl = finalBase
+
 export const api = axios.create({
   baseURL: finalBase,
   headers: {

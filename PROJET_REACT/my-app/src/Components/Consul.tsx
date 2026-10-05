@@ -2,6 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Link } from 'react-router-dom'
 import { BookOpenText, FileText, Search } from 'lucide-react'
 import { bookService } from '../services/bookService'
+import { apiBaseUrl } from '../services/api'
 import { catalogCirculationService, type CatalogDocument } from '../services/catalogCirculationService'
 import { digitalAccessService } from '../services/digitalAccessService'
 import type { DigitalAccess } from '../services/types'
@@ -47,10 +48,16 @@ function lazyPdfReader() {
 }
 
 /** Afficheur PDF natif du navigateur : repli silencieux quand le lecteur
- * avancé ne peut pas se charger. Le catalogue s'affiche quand même. */
-const NativePdfViewer = ({ url, title }: { url: string; title: string }) => (
+ * avancé ne peut pas se charger. Le catalogue s'affiche quand même.
+ * Adhérents : sandbox sans allow-downloads, pas de téléchargement proposé. */
+const NativePdfViewer = ({ url, title, allowDownload = false }: { url: string; title: string; allowDownload?: boolean }) => (
   <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-    <iframe src={url} title={title} className="h-[62dvh] w-full sm:h-[68vh]" />
+    <iframe
+      src={url}
+      title={title}
+      className="h-[62dvh] w-full sm:h-[68vh]"
+      sandbox={allowDownload ? undefined : 'allow-same-origin allow-scripts'}
+    />
   </div>
 )
 
@@ -71,6 +78,11 @@ type CatalogReader = {
   fullAccess: boolean
   fullLoading: boolean
   fullError: boolean
+  /** 0..1 : progression du téléchargement intégral (utile sur mobile). */
+  fullProgress: number | null
+  /** Streaming HTTP direct (Range) : les pages arrivent à la demande. */
+  fullStreamUrl: string | null
+  streamFailed: boolean
   isPdf: boolean
   previewUrl: string | null
   previewText: string | null
@@ -102,7 +114,7 @@ const Consul = () => {
   const readerSession = useRef(0)
   const pdfPrefetched = useRef(false)
   // Aperçu courant : permet de relancer la version intégrale sans tout recharger.
-  const catalogPreview = useRef<{ document: CatalogDocument; isPdf: boolean; previewUrl: string | null; previewText: string | null } | null>(null)
+  const catalogPreview = useRef<{ document: CatalogDocument; isPdf: boolean; previewUrl: string | null; previewText: string | null; streamFailed: boolean } | null>(null)
   const PREVIEW_SIZE = 10
 
   useEffect(() => {
@@ -227,18 +239,42 @@ const Consul = () => {
     }
   }
 
-  // Charge la version intégrale après l'aperçu, en silence.
-  // En cas d'échec, fullError passe à vrai et un bouton de relance
-  // apparaît : on ne reste plus bloqué sur l'aperçu sans explication.
+  // Charge la version intégrale après l'aperçu.
+  // PDF : streaming HTTP direct (Range) — seules les pages lues transitent,
+  // la première page intégrale s'affiche sans attendre les 25 Mo. Le
+  // téléchargement complet (blob) ne sert que de repli si le stream échoue.
+  // En cas d'échec, fullError passe à vrai et un bouton de relance apparaît.
   const loadFullCatalog = async (session?: number) => {
     const snap = catalogPreview.current
     if (!snap) return
     const currentSession = session ?? readerSession.current
+    if (readerSession.current !== currentSession) return
+    if (snap.isPdf && !snap.streamFailed) {
+      setReader((current) => current.kind === 'catalog' && current.document.id === snap.document.id
+        ? {
+          ...current,
+          fullLoading: true,
+          fullError: false,
+          fullProgress: 0,
+          fullStreamUrl: `${apiBaseUrl}/catalogs/${snap.document.id}/content`,
+          streamFailed: false,
+        }
+        : current)
+      return
+    }
     setReader((current) => current.kind === 'catalog' && current.document.id === snap.document.id
-      ? { ...current, fullLoading: true, fullError: false }
+      ? { ...current, fullLoading: true, fullError: false, fullProgress: 0 }
       : current)
     try {
-      const blob = await withRetry(() => catalogCirculationService.fetchFullBlob(snap.document.id), [600, 1200, 2400, 4800])
+      const blob = await withRetry(() => catalogCirculationService.fetchFullBlob(
+        snap.document.id,
+        (ratio) => {
+          if (readerSession.current !== currentSession) return
+          setReader((current) => current.kind === 'catalog' && current.document.id === snap.document.id
+            ? { ...current, fullProgress: Math.round(ratio * 100) / 100 }
+            : current)
+        },
+      ), [600, 1200, 2400, 4800])
       let fullUrl: string | null = null
       let fullText: string | null = null
       let fullTextUrl: string | null = null
@@ -254,7 +290,7 @@ const Consul = () => {
         return
       }
       setReader((current) => current.kind === 'catalog' && current.document.id === snap.document.id
-        ? { ...current, fullLoading: false, fullError: false, fullUrl, fullText, fullTextUrl }
+        ? { ...current, fullLoading: false, fullError: false, fullProgress: 1, fullUrl, fullText, fullTextUrl }
         : current)
     } catch {
       if (readerSession.current !== currentSession) return
@@ -265,6 +301,36 @@ const Consul = () => {
   }
 
   const retryFullCatalog = () => {
+    const snap = catalogPreview.current
+    if (snap) snap.streamFailed = false
+    setReader((current) => current.kind === 'catalog'
+      ? { ...current, fullStreamUrl: null, streamFailed: false, fullError: false }
+      : current)
+    void loadFullCatalog()
+  }
+
+  const handleStreamProgress = (documentId: number, ratio: number) => {
+    if (catalogPreview.current?.document.id !== documentId) return
+    setReader((current) => current.kind === 'catalog' && current.document.id === documentId
+      ? { ...current, fullProgress: Math.round(ratio * 100) / 100 }
+      : current)
+  }
+
+  const handleStreamReady = (documentId: number) => {
+    if (catalogPreview.current?.document.id !== documentId) return
+    setReader((current) => current.kind === 'catalog' && current.document.id === documentId
+      ? { ...current, fullLoading: false, fullError: false, fullProgress: 1 }
+      : current)
+  }
+
+  // Le streaming a échoué : repli sur le téléchargement complet (blob).
+  const handleStreamFailed = (documentId: number) => {
+    const snap = catalogPreview.current
+    if (!snap || snap.document.id !== documentId || snap.streamFailed) return
+    snap.streamFailed = true
+    setReader((current) => current.kind === 'catalog' && current.document.id === documentId
+      ? { ...current, fullStreamUrl: null, streamFailed: true }
+      : current)
     void loadFullCatalog()
   }
 
@@ -284,6 +350,9 @@ const Consul = () => {
       fullAccess: false,
       fullLoading: false,
       fullError: false,
+      fullProgress: null,
+      fullStreamUrl: null,
+      streamFailed: false,
       isPdf,
       previewUrl: null as string | null,
       previewText: null as string | null,
@@ -312,11 +381,11 @@ const Consul = () => {
         return
       }
       const entitled = accessResult.status === 'fulfilled' && accessResult.value.data.fullAccess && user !== null
-      catalogPreview.current = { document, isPdf, previewUrl, previewText }
+      catalogPreview.current = { document, isPdf, previewUrl, previewText, streamFailed: false }
       // L'aperçu est lisible : le bouton « Lire » redevient normal,
       // l'intégrale continue en arrière-plan.
       setOpeningCatalogId(null)
-      setReader({ ...baseReader, loading: false, fullAccess: entitled, fullLoading: entitled, fullError: false, previewUrl, previewText })
+      setReader({ ...baseReader, loading: false, fullAccess: entitled, fullLoading: entitled, fullError: false, fullProgress: entitled ? 0 : null, fullStreamUrl: null, streamFailed: false, previewUrl, previewText })
       if (!entitled) return
       await loadFullCatalog(session)
     } catch {
@@ -501,15 +570,20 @@ const Consul = () => {
           badgeLabel={reader.loading
             ? 'Chargement…'
             : (reader.fullUrl ?? reader.fullText) != null
+              || (reader.fullStreamUrl != null && !reader.fullLoading && !reader.fullError)
               ? 'Lecture intégrale'
               : reader.fullAccess ? 'Aperçu — intégrale en cours' : 'Aperçu — première page'}
           badgeVariant={reader.loading
             ? 'warning'
-            : (reader.fullUrl ?? reader.fullText) != null ? 'success' : 'warning'}
+            : (reader.fullUrl ?? reader.fullText) != null
+              || (reader.fullStreamUrl != null && !reader.fullLoading && !reader.fullError)
+              ? 'success' : 'warning'}
           notice={!reader.loading && reader.fullError
             ? 'La version intégrale n’a pas pu charger (prêt actif requis, réseau instable). L’aperçu reste visible — relancez le chargement.'
             : !reader.loading && reader.fullLoading
-              ? 'Aperçu affiché — la version intégrale (toutes les pages) charge en arrière-plan.'
+              ? (reader.fullProgress !== null && reader.fullProgress > 0
+                ? `Version intégrale en cours de chargement — ${Math.round(reader.fullProgress * 100)} % (toutes les pages arrivent).`
+                : 'Aperçu affiché — la version intégrale (toutes les pages) charge en arrière-plan.')
               : !reader.loading && !reader.fullAccess
                 ? (user
                   ? 'Sans emprunt en cours ni réservation disponible, seule la première page est visible.'
@@ -544,12 +618,25 @@ const Consul = () => {
               resetKey={`catalog-${reader.document.id}`}
               fallback={(() => {
                 const nativeUrl = reader.fullUrl ?? reader.previewUrl ?? ''
-                return nativeUrl ? <NativePdfViewer url={nativeUrl} title={reader.document.name} /> : null
+                return nativeUrl ? <NativePdfViewer url={nativeUrl} title={reader.document.name} allowDownload={staff} /> : null
               })()}
             >
               {reader.isPdf ? (
                 <Suspense fallback={<p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Chargement du lecteur PDF…</p>}>
-                  <PdfReader url={reader.fullUrl ?? reader.previewUrl ?? ''} title={reader.document.name} />
+                  <PdfReader
+                    url={reader.fullUrl ?? reader.previewUrl ?? ''}
+                    title={reader.document.name}
+                    allowDownload={staff}
+                    progress={reader.fullLoading ? reader.fullProgress : null}
+                    streamUrl={reader.fullStreamUrl}
+                    streamHeaders={(() => {
+                      const token = localStorage.getItem('jwt_token')
+                      return token ? { Authorization: `Bearer ${token}` } : {}
+                    })()}
+                    onStreamProgress={(ratio) => handleStreamProgress(reader.document.id, ratio)}
+                    onStreamReady={() => handleStreamReady(reader.document.id)}
+                    onStreamFailed={() => handleStreamFailed(reader.document.id)}
+                  />
                 </Suspense>
               ) : (
                 <CatalogCsvReader text={reader.fullText ?? reader.previewText ?? ''} title={reader.document.name} />

@@ -135,15 +135,20 @@ export const catalogCirculationService = {
     const response = await api.get<Blob>(`/public/catalogs/${id}/preview`, { responseType: 'blob' })
     return response.data
   },
-  async fetchFullBlob(id: number) {
+  async fetchFullBlob(id: number, onProgress?: (ratio: number) => void) {
+    const progress = onProgress
+      ? { onDownloadProgress: (event: { loaded: number; total?: number }) => {
+          if (event.total && event.total > 0) onProgress(Math.min(1, event.loaded / event.total))
+        } }
+      : {}
     try {
-      const response = await api.get<Blob>(`/catalogs/${id}/content`, { responseType: 'blob' })
+      const response = await api.get<Blob>(`/catalogs/${id}/content`, { responseType: 'blob', ...progress })
       return response.data
     } catch (error: any) {
       // /content exige un prêt actif (403 sans emprunt). Le personnel dispose
       // de /download : repli sur 403 comme sur 404 pour le téléchargement staff.
       if (error?.response?.status === 404 || error?.response?.status === 403) {
-        const fallback = await api.get<Blob>(`/catalogs/${id}/download`, { responseType: 'blob' })
+        const fallback = await api.get<Blob>(`/catalogs/${id}/download`, { responseType: 'blob', ...progress })
         return fallback.data
       }
       throw error

@@ -247,6 +247,62 @@ class CatalogCirculationIntegrationTest {
                 "catalogDocumentId", documentId));
     }
 
+    @Test
+    void contentServesPartialRangesToBorrowerOnly() throws Exception {
+        UserEntity borrower = saveUser("rangeborrower@losofab", Role.ADHERENT);
+        UserEntity stranger = saveUser("rangestranger@losofab", Role.ADHERENT);
+        CatalogDocument document = saveDocument();
+        int total = document.getContent().length;
+
+        mockMvc.perform(post("/api/catalog-circulation/loans")
+                        .header("Authorization", bearer(borrower))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loanPayload(borrower.getId(), document.getId())))
+                .andExpect(status().isOk());
+
+        byte[] expected = java.util.Arrays.copyOfRange(document.getContent(), 0, 10);
+        mockMvc.perform(get("/api/catalogs/{id}/content", document.getId())
+                        .header("Authorization", bearer(borrower))
+                        .header("Range", "bytes=0-9"))
+                .andExpect(status().isPartialContent())
+                .andExpect(content().bytes(expected));
+
+        mockMvc.perform(get("/api/catalogs/{id}/content", document.getId())
+                        .header("Authorization", bearer(stranger))
+                        .header("Range", "bytes=0-9"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void everyBorrowerKeepsFullAccessWhenCopiesAreShared() throws Exception {
+        UserEntity first = saveUser("sharedfirst@losofab", Role.ADHERENT);
+        UserEntity second = saveUser("sharedsecond@losofab", Role.ADHERENT);
+        CatalogDocument document = saveDocument();
+
+        mockMvc.perform(post("/api/catalog-circulation/loans")
+                        .header("Authorization", bearer(first))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loanPayload(first.getId(), document.getId())))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/catalog-circulation/loans")
+                        .header("Authorization", bearer(second))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loanPayload(second.getId(), document.getId())))
+                .andExpect(status().isOk());
+
+        // Avant correction, seul le dernier prêt (échéance max) ouvrait l'accès.
+        mockMvc.perform(get("/api/catalogs/{id}/content", document.getId())
+                        .header("Authorization", bearer(first)))
+                .andExpect(status().isOk())
+                .andExpect(content().bytes(document.getContent()));
+
+        mockMvc.perform(get("/api/catalogs/{id}/content", document.getId())
+                        .header("Authorization", bearer(second)))
+                .andExpect(status().isOk())
+                .andExpect(content().bytes(document.getContent()));
+    }
+
     private CatalogDocument saveDocument() {
         CatalogDocument document = new CatalogDocument();
         document.setFileName("catalogue.csv");

@@ -9,12 +9,25 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
 interface CatalogPdfReaderProps {
   url: string
   title: string
+  /** Personnel uniquement : affiche « Ouvrir en grand » et autorise le téléchargement natif. */
+  allowDownload?: boolean
+  /** 0..1 pendant le téléchargement de la version intégrale (mobile : feedback visible). */
+  progress?: number | null
+  /** URL HTTP directe du contenu intégral : pdf.js ne charge que les pages
+   * demandées (Range) au lieu de tout télécharger d'un coup. */
+  streamUrl?: string | null
+  streamHeaders?: Record<string, string>
+  onStreamProgress?: (ratio: number) => void
+  onStreamReady?: () => void
+  onStreamFailed?: () => void
 }
 
 const MIN_ZOOM = 0.75
 const MAX_ZOOM = 3
+/** Plafond de pixels du canvas : évite les crashs mémoire sur téléphone (grosses pages + zoom). */
+const MAX_CANVAS_PIXELS = 12_000_000
 
-const CatalogPdfReader = ({ url, title }: CatalogPdfReaderProps) => {
+const CatalogPdfReader = ({ url, title, allowDownload = false, progress = null, streamUrl = null, streamHeaders, onStreamProgress, onStreamReady, onStreamFailed }: CatalogPdfReaderProps) => {
   const scrollRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const pdfRef = useRef<PDFDocumentProxy | null>(null)
@@ -27,6 +40,10 @@ const CatalogPdfReader = ({ url, title }: CatalogPdfReaderProps) => {
   // automatiquement sur le lecteur natif : aucun écran d'erreur.
   const [useNative, setUseNative] = useState(false)
   const [scrollWidth, setScrollWidth] = useState(0)
+  // Callbacks stables : l'effet de chargement ne dépend que de l'URL,
+  // mais doit toujours appeler la dernière version des callbacks.
+  const streamCallbacks = useRef({ onStreamProgress, onStreamReady, onStreamFailed, streamHeaders })
+  streamCallbacks.current = { onStreamProgress, onStreamReady, onStreamFailed, streamHeaders }
 
   useEffect(() => {
     const element = scrollRef.current
@@ -48,8 +65,18 @@ const CatalogPdfReader = ({ url, title }: CatalogPdfReaderProps) => {
     // aperçu → intégrale : pas d'écran blanc, l'aperçu reste visible
     // avec un bandeau de chargement au lieu d'un flash.
     setPage(1)
-    pdfjsLib
-      .getDocument({ url, withCredentials: false })
+    // Version intégrale : streaming HTTP (Range) quand disponible —
+    // seules les pages lues transitent, idéal sur mobile. Sinon blob local.
+    const loadingTask = streamUrl
+      ? pdfjsLib.getDocument({ url: streamUrl, httpHeaders: streamCallbacks.current.streamHeaders, withCredentials: false })
+      : pdfjsLib.getDocument({ url, withCredentials: false })
+    if (streamUrl) {
+      loadingTask.onProgress = (data: { loaded: number; total: number }) => {
+        const cb = streamCallbacks.current.onStreamProgress
+        if (!cancelled && cb && data.total > 0) cb(Math.min(1, data.loaded / data.total))
+      }
+    }
+    loadingTask
       .promise.then((pdf) => {
         if (cancelled) {
           void pdf.destroy()
@@ -58,11 +85,20 @@ const CatalogPdfReader = ({ url, title }: CatalogPdfReaderProps) => {
         pdfRef.current = pdf
         setNumPages(pdf.numPages)
         setLoading(false)
+        const ready = streamCallbacks.current.onStreamReady
+        if (streamUrl && ready) ready()
       })
       .catch(() => {
         if (!cancelled) {
-          setUseNative(true)
-          setLoading(false)
+          // Streaming impossible (réseau, droits) : le parent bascule
+          // sur le téléchargement classique ; à défaut, lecteur natif.
+          const failed = streamCallbacks.current.onStreamFailed
+          if (streamUrl && failed) {
+            failed()
+          } else {
+            setUseNative(true)
+            setLoading(false)
+          }
         }
       })
     return () => {
@@ -71,7 +107,7 @@ const CatalogPdfReader = ({ url, title }: CatalogPdfReaderProps) => {
       pdfRef.current = null
       if (pdf) void pdf.destroy().catch(() => undefined)
     }
-  }, [url])
+  }, [url, streamUrl])
 
   useEffect(() => {
     if (loading || numPages === 0 || scrollWidth <= 0) return
@@ -89,7 +125,16 @@ const CatalogPdfReader = ({ url, title }: CatalogPdfReaderProps) => {
         const baseViewport = pdfPage.getViewport({ scale: 1 })
         const fitScale = (scrollWidth - 16) / baseViewport.width
         const viewport = pdfPage.getViewport({ scale: Math.max(0.2, fitScale * zoom) })
-        const dpr = Math.min(3, window.devicePixelRatio || 1)
+        // Téléphone : DPR plafonné + pixels plafonnés, sinon le canvas
+        // explose en mémoire et le rendu rame ou échoue.
+        const coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches
+        const narrow = scrollWidth > 0 && scrollWidth < 480
+        const dprCap = coarse || narrow ? 1.5 : 2
+        let dpr = Math.min(dprCap, window.devicePixelRatio || 1)
+        const cssArea = Math.max(1, viewport.width * viewport.height)
+        if (cssArea * dpr * dpr > MAX_CANVAS_PIXELS) {
+          dpr = Math.sqrt(MAX_CANVAS_PIXELS / cssArea)
+        }
         canvas.width = Math.floor(viewport.width * dpr)
         canvas.height = Math.floor(viewport.height * dpr)
         canvas.style.width = `${Math.floor(viewport.width)}px`
@@ -105,7 +150,13 @@ const CatalogPdfReader = ({ url, title }: CatalogPdfReaderProps) => {
         if (!cancelled) setRendering(false)
       } catch {
         if (!cancelled) {
-          setUseNative(true)
+          // Coupure réseau en cours de lecture streamée : repli blob.
+          const failed = streamCallbacks.current.onStreamFailed
+          if (streamUrl && failed) {
+            failed()
+          } else {
+            setUseNative(true)
+          }
           setRendering(false)
         }
       }
@@ -145,7 +196,14 @@ const CatalogPdfReader = ({ url, title }: CatalogPdfReaderProps) => {
   if (useNative) {
     return (
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <iframe src={url} title={title} className="h-[62dvh] w-full sm:h-[68vh]" />
+        <iframe
+          src={url}
+          title={title}
+          className="h-[62dvh] w-full sm:h-[68vh]"
+          // Adhérents : pas de téléchargement explicite. Sans allow-downloads,
+          // la visionneuse native ne propose pas d'enregistrement.
+          sandbox={allowDownload ? undefined : 'allow-same-origin allow-scripts'}
+        />
       </div>
     )
   }
@@ -154,7 +212,9 @@ const CatalogPdfReader = ({ url, title }: CatalogPdfReaderProps) => {
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
       {loading && numPages > 0 && (
         <p className="border-b border-primary-100 bg-primary-50 px-3 py-2 text-[13px] font-medium text-primary-900" role="status">
-          Version intégrale en cours de chargement — toutes les pages arrivent…
+          {progress !== null && progress !== undefined
+            ? `Version intégrale en cours de chargement — ${Math.round(progress * 100)} %…`
+            : 'Version intégrale en cours de chargement — toutes les pages arrivent…'}
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-2 py-2">
@@ -210,16 +270,18 @@ const CatalogPdfReader = ({ url, title }: CatalogPdfReaderProps) => {
           >
             <Scan size={20} />
           </button>
-          <a
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            aria-label={`Ouvrir ${title} en plein écran navigateur`}
-            title="Ouvrir en grand"
-            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl p-2 text-slate-700 hover:bg-slate-100"
-          >
-            <ExternalLink size={20} />
-          </a>
+          {allowDownload && (
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`Ouvrir ${title} en plein écran navigateur`}
+              title="Ouvrir en grand"
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl p-2 text-slate-700 hover:bg-slate-100"
+            >
+              <ExternalLink size={20} />
+            </a>
+          )}
         </div>
       </div>
       <div ref={scrollRef} className="max-h-[62dvh] overflow-auto bg-slate-50 p-2 sm:max-h-[68vh] sm:p-3">

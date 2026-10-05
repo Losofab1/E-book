@@ -113,16 +113,63 @@ public class CatalogController {
     }
 
     @GetMapping("/{id}/content")
-    public ResponseEntity<byte[]> content(@PathVariable Long id, Authentication authentication) {
+    public ResponseEntity<byte[]> content(@PathVariable Long id, Authentication authentication,
+            @RequestHeader(value = "Range", required = false) String range) {
         CatalogDocument document = repository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Catalogue introuvable."));
         if (!circulationService.canAccess(id, authentication)) {
             throw new AccessDeniedException("Un prêt actif ou une réservation disponible est nécessaire pour lire ce catalogue.");
         }
-        byte[] content = document.getContent();
+        byte[] content = document.getContent() == null ? new byte[0] : document.getContent();
+        int total = content.length;
+        MediaType type;
+        try {
+            type = MediaType.parseMediaType(document.getContentType());
+        } catch (Exception exception) {
+            type = MediaType.APPLICATION_OCTET_STREAM;
+        }
+        String disposition = "inline; filename=\"" + document.getFileName().replace("\"", "") + "\"";
+        // Streaming par plages (Range) : le lecteur PDF ne télécharge que les
+        // pages demandées au lieu des 25 Mo d'un coup — vital sur téléphone.
+        if (range != null && range.startsWith("bytes=")) {
+            try {
+                String spec = range.substring(6).trim();
+                int dash = spec.indexOf('-');
+                long start;
+                long end;
+                if (dash == 0) {
+                    long suffix = Long.parseLong(spec.substring(1).trim());
+                    end = total - 1;
+                    start = Math.max(0, total - suffix);
+                } else {
+                    start = dash > 0 ? Long.parseLong(spec.substring(0, dash).trim()) : 0;
+                    String endPart = dash >= 0 ? spec.substring(dash + 1).trim() : "";
+                    end = endPart.isEmpty() ? total - 1 : Long.parseLong(endPart);
+                }
+                if (start < 0) start = 0;
+                if (end >= total) end = total - 1;
+                if (total > 0 && start < total && start <= end) {
+                    byte[] slice = java.util.Arrays.copyOfRange(content, (int) start, (int) end + 1);
+                    return ResponseEntity.status(org.springframework.http.HttpStatus.PARTIAL_CONTENT)
+                            .contentType(type)
+                            .contentLength(slice.length)
+                            .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                            .header(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + total)
+                            .header(HttpHeaders.CONTENT_DISPOSITION, disposition)
+                            .header(HttpHeaders.CACHE_CONTROL, "private, max-age=300")
+                            .body(slice);
+                }
+                return ResponseEntity.status(org.springframework.http.HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                        .header(HttpHeaders.CONTENT_RANGE, "bytes */" + total)
+                        .build();
+            } catch (NumberFormatException ex) {
+                // Plage illisible : on sert le fichier entier ci-dessous.
+            }
+        }
         return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(document.getContentType()))
-                .contentLength(content == null ? 0 : content.length)
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + document.getFileName().replace("\"", "") + "\"")
+                .contentType(type)
+                .contentLength(total)
+                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition)
                 .header(HttpHeaders.CACHE_CONTROL, "private, max-age=300")
                 .body(content);
     }

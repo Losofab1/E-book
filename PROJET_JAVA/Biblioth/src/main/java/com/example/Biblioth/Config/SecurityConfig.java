@@ -106,6 +106,8 @@ public class SecurityConfig {
                 .toList());
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
+        // Le lecteur PDF streamé (fetch + Range) doit lire ces en-têtes réponse.
+        config.setExposedHeaders(List.of("Accept-Ranges", "Content-Range", "Content-Length"));
         config.setAllowCredentials(false);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
