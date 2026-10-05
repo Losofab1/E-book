@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, ExternalLink, Minus, Plus, Scan } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ExternalLink, Minus, Plus, Scan } from 'lucide-react'
 import * as pdfjsLib from 'pdfjs-dist'
 import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
@@ -24,18 +24,20 @@ interface CatalogPdfReaderProps {
 
 const MIN_ZOOM = 0.75
 const MAX_ZOOM = 3
-/** Plafond de pixels du canvas : évite les crashs mémoire sur téléphone (grosses pages + zoom). */
+/** Plafond de pixels par page : évite les crashs mémoire sur téléphone (grosses pages + zoom). */
 const MAX_CANVAS_PIXELS = 12_000_000
 
 const CatalogPdfReader = ({ url, title, allowDownload = false, progress = null, streamUrl = null, streamHeaders, onStreamProgress, onStreamReady, onStreamFailed }: CatalogPdfReaderProps) => {
   const scrollRef = useRef<HTMLDivElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const pageWrappers = useRef(new Map<number, HTMLDivElement | null>())
+  const pageCanvases = useRef(new Map<number, HTMLCanvasElement | null>())
+  const renderedForKey = useRef(new Map<number, string>())
   const pdfRef = useRef<PDFDocumentProxy | null>(null)
   const [numPages, setNumPages] = useState(0)
-  const [page, setPage] = useState(1)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [renderedCount, setRenderedCount] = useState(0)
   const [zoom, setZoom] = useState(1)
   const [loading, setLoading] = useState(true)
-  const [rendering, setRendering] = useState(false)
   // En cas de PDF illisible par le moteur avancé, on bascule
   // automatiquement sur le lecteur natif : aucun écran d'erreur.
   const [useNative, setUseNative] = useState(false)
@@ -64,7 +66,9 @@ const CatalogPdfReader = ({ url, title, allowDownload = false, progress = null, 
     // On garde l'ancien nombre de pages pendant le basculement
     // aperçu → intégrale : pas d'écran blanc, l'aperçu reste visible
     // avec un bandeau de chargement au lieu d'un flash.
-    setPage(1)
+    renderedForKey.current.clear()
+    setRenderedCount(0)
+    setCurrentPage(1)
     // Version intégrale : streaming HTTP (Range) quand disponible —
     // seules les pages lues transitent, idéal sur mobile. Sinon blob local.
     const loadingTask = streamUrl
@@ -109,19 +113,35 @@ const CatalogPdfReader = ({ url, title, allowDownload = false, progress = null, 
     }
   }, [url, streamUrl])
 
+  // Lecture en défilement continu : toutes les pages s'affichent les unes
+  // sous les autres. Chaque page se rend quand elle approche de l'écran
+  // (IntersectionObserver), jamais toutes d'un coup — fluide sur téléphone.
   useEffect(() => {
-    if (loading || numPages === 0 || scrollWidth <= 0) return
+    const pdf = pdfRef.current
+    if (loading || !pdf || numPages === 0 || scrollWidth <= 0) return
     let cancelled = false
-    let renderTask: { cancel: () => void } | null = null
-    const render = async () => {
-      const canvas = canvasRef.current
-      const pdf = pdfRef.current
-      if (!canvas || !pdf) return
-      setRendering(true)
+    const pending = new Set<{ cancel: () => void }>()
+    const renderKey = `${zoom.toFixed(2)}x${Math.round(scrollWidth)}`
+    // Nouveau zoom / nouvelle largeur : tout sera re-rendu paresseusement.
+    if (!renderedForKey.current.get(-1)) {
+      renderedForKey.current.clear()
+      renderedForKey.current.set(-1, renderKey)
+      setRenderedCount(0)
+    } else if (renderedForKey.current.get(-1) !== renderKey) {
+      renderedForKey.current.clear()
+      renderedForKey.current.set(-1, renderKey)
+      setRenderedCount(0)
+    }
+
+    const renderPage = async (pageNumber: number) => {
+      if (cancelled || renderedForKey.current.get(pageNumber) === renderKey) return
+      renderedForKey.current.set(pageNumber, renderKey)
+      const canvas = pageCanvases.current.get(pageNumber)
+      const currentPdf = pdfRef.current
+      if (!canvas || !currentPdf) return
       try {
-        const safePage = Math.min(Math.max(1, page), pdf.numPages)
-        const pdfPage = await pdf.getPage(safePage)
-        if (cancelled) return
+        const pdfPage = await currentPdf.getPage(pageNumber)
+        if (cancelled || renderedForKey.current.get(pageNumber) !== renderKey) return
         const baseViewport = pdfPage.getViewport({ scale: 1 })
         const fitScale = (scrollWidth - 16) / baseViewport.width
         const viewport = pdfPage.getViewport({ scale: Math.max(0.2, fitScale * zoom) })
@@ -143,41 +163,72 @@ const CatalogPdfReader = ({ url, title, allowDownload = false, progress = null, 
         if (context) {
           context.setTransform(dpr, 0, 0, dpr, 0, 0)
           const task = pdfPage.render({ canvasContext: context, viewport })
-          renderTask = task as unknown as { cancel: () => void }
+          const cancellable = task as unknown as { cancel: () => void }
+          pending.add(cancellable)
           await task.promise
+          pending.delete(cancellable)
         }
         pdfPage.cleanup()
-        if (!cancelled) setRendering(false)
+        if (!cancelled && renderedForKey.current.get(pageNumber) === renderKey) {
+          setRenderedCount((c) => c + 1)
+        }
       } catch {
+        pending.clear()
         if (!cancelled) {
           // Coupure réseau en cours de lecture streamée : repli blob.
           const failed = streamCallbacks.current.onStreamFailed
           if (streamUrl && failed) {
+            renderedForKey.current.delete(pageNumber)
             failed()
-          } else {
-            setUseNative(true)
           }
-          setRendering(false)
         }
       }
     }
-    void render()
+
+    const container = scrollRef.current
+    const nearObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const pageNumber = Number((entry.target as HTMLElement).dataset.page ?? 0)
+          if (entry.isIntersecting && pageNumber > 0) void renderPage(pageNumber)
+        }
+      },
+      { root: container, rootMargin: '1200px 0px' },
+    )
+    // Page la plus visible → indicateur « page X / N ».
+    const visibleObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const pageNumber = Number((entry.target as HTMLElement).dataset.page ?? 0)
+          if (entry.isIntersecting && pageNumber > 0) setCurrentPage(pageNumber)
+        }
+      },
+      { root: container, rootMargin: '-40% 0px -40% 0px' },
+    )
+    pageWrappers.current.forEach((element) => {
+      if (element) {
+        nearObserver.observe(element)
+        visibleObserver.observe(element)
+      }
+    })
+    // La première page part sans attendre le défilement.
+    void renderPage(1)
     return () => {
       cancelled = true
-      try {
-        renderTask?.cancel()
-      } catch {
-        /* rendu déjà terminé */
-      }
+      nearObserver.disconnect()
+      visibleObserver.disconnect()
+      pending.forEach((task) => {
+        try {
+          task.cancel()
+        } catch {
+          /* rendu déjà terminé */
+        }
+      })
+      pending.clear()
     }
-  }, [page, zoom, scrollWidth, numPages, loading])
+  }, [pageWrappers, loading, numPages, zoom, scrollWidth, streamUrl, url])
 
-  const goTo = useCallback(
-    (next: number) => setPage((p) => Math.min(Math.max(1, next), Math.max(1, numPages))),
-    [numPages],
-  )
-
-  if (!url) {
+  if (!url && !streamUrl) {
     return (
       <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
         Document vide ou lien expiré. Fermez puis rouvrez la lecture.
@@ -218,29 +269,12 @@ const CatalogPdfReader = ({ url, title, allowDownload = false, progress = null, 
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-2 py-2">
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => goTo(page - 1)}
-            disabled={page <= 1}
-            aria-label="Page précédente"
-            className="min-h-[44px] min-w-[44px] rounded-xl p-2 text-slate-700 hover:bg-slate-100 disabled:opacity-40"
-          >
-            <ChevronLeft size={22} />
-          </button>
-          <span className="min-w-[72px] text-center text-sm font-semibold" aria-live="polite">
-            {page} / {Math.max(1, numPages)}
-          </span>
-          <button
-            type="button"
-            onClick={() => goTo(page + 1)}
-            disabled={page >= numPages}
-            aria-label="Page suivante"
-            className="min-h-[44px] min-w-[44px] rounded-xl p-2 text-slate-700 hover:bg-slate-100 disabled:opacity-40"
-          >
-            <ChevronRight size={22} />
-          </button>
-        </div>
+        <span className="min-w-[72px] px-2 text-center text-sm font-semibold" aria-live="polite">
+          Page {Math.min(currentPage, Math.max(1, numPages))} / {Math.max(1, numPages)}
+        </span>
+        {renderedCount < numPages && (
+          <span className="text-[13px] text-slate-500">Préparation des pages… {renderedCount}/{numPages}</span>
+        )}
         <div className="ml-auto flex items-center gap-1">
           <button
             type="button"
@@ -256,7 +290,7 @@ const CatalogPdfReader = ({ url, title, allowDownload = false, progress = null, 
             type="button"
             onClick={() => setZoom((z) => Math.min(MAX_ZOOM, +(z + 0.25).toFixed(2)))}
             disabled={zoom >= MAX_ZOOM}
-            aria-label="Agrandir le texte"
+            aria-label="Agrandir la taille du texte"
             className="min-h-[44px] min-w-[44px] rounded-xl p-2 text-slate-700 hover:bg-slate-100 disabled:opacity-40"
           >
             <Plus size={20} />
@@ -285,31 +319,31 @@ const CatalogPdfReader = ({ url, title, allowDownload = false, progress = null, 
         </div>
       </div>
       <div ref={scrollRef} className="max-h-[62dvh] overflow-auto bg-slate-50 p-2 sm:max-h-[68vh] sm:p-3">
-        <div className="mx-auto w-fit">
-          <canvas ref={canvasRef} className="max-w-full rounded-lg bg-white shadow" role="img" aria-label={`Page ${page} de ${title}`} />
-          {rendering && <p className="mt-2 text-center text-[13px] text-slate-500">Rendu de la page…</p>}
+        <div className="mx-auto flex w-fit min-w-full flex-col items-center gap-3">
+          {Array.from({ length: numPages }, (_, index) => index + 1).map((pageNumber) => (
+            <div
+              key={pageNumber}
+              data-page={pageNumber}
+              ref={(element) => {
+                pageWrappers.current.set(pageNumber, element)
+              }}
+              className="flex min-h-[200px] w-fit max-w-full items-center justify-center"
+            >
+              <canvas
+                ref={(element) => {
+                  pageCanvases.current.set(pageNumber, element)
+                }}
+                className="max-w-full rounded-lg bg-white shadow"
+                role="img"
+                aria-label={`Page ${pageNumber} de ${title}`}
+              />
+            </div>
+          ))}
         </div>
       </div>
-      {numPages > 1 && (
-        <div className="flex items-center justify-center gap-3 border-t border-slate-200 bg-white px-3 py-2 text-sm">
-          <button
-            type="button"
-            disabled={page <= 1}
-            onClick={() => goTo(page - 1)}
-            className="btn-outline min-h-[44px] flex-1 text-sm sm:flex-none sm:px-6"
-          >
-            Précédent
-          </button>
-          <button
-            type="button"
-            disabled={page >= numPages}
-            onClick={() => goTo(page + 1)}
-            className="btn-primary min-h-[44px] flex-1 text-sm sm:flex-none sm:px-6"
-          >
-            Suivant
-          </button>
-        </div>
-      )}
+      <p className="border-t border-slate-200 bg-white px-3 py-2 text-center text-[13px] text-slate-600">
+        Faites défiler pour lire toutes les pages ({numPages} page{numPages === 1 ? '' : 's'}).
+      </p>
     </div>
   )
 }
