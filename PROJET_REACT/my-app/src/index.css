@@ -10,10 +10,17 @@
   html {
     scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;
+    /* Laisse le pincement (pinch-zoom) du téléphone agir sur la page :
+       pan + pinch autorisés, jamais de blocage du zoom navigateur. */
+    touch-action: pan-x pan-y pinch-zoom;
   }
 
   body {
     @apply bg-slate-100 text-slate-800 antialiased;
+    /* Même chose sur body : ne jamais désactiver le pinch-zoom.
+       Pas de `touch-action: none` ni `manipulation` ici. */
+    touch-action: pan-x pan-y pinch-zoom;
+    overscroll-behavior-y: auto;
   }
 
   button,
