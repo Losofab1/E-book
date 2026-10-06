@@ -17,6 +17,7 @@ import Profile from './Pages/Profile.tsx'
 import { AuthProvider } from './AuthContext'
 import RequireAuth from './RequireAuth'
 import BackToTop from './Components/BackToTop'
+import ScrollToTop from './Components/ScrollToTop'
 import ErrorBoundary from './Components/ui/ErrorBoundary'
 
 const NotFound = () => (
@@ -97,6 +98,7 @@ function App() {
     <AuthProvider>
       <div className="min-h-screen bg-slate-100">
         <Router>
+          <ScrollToTop />
           <NavBar />
 
           <main className="pt-24">
